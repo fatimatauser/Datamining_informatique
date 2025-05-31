@@ -510,14 +510,6 @@ if uploaded_file:
 else:
     st.info("ℹ️ Veuillez télécharger un fichier CSV ou Excel pour commencer l'analyse")
     
-    # Image intégrée avec lien direct
-    st.markdown("""
-    <div style="text-align:center; margin:20px 0;">
-        <img src="https://images.pexels.com/photos/3944405/pexels-photo-3944405.jpeg?auto=compress&cs=tinysrgb&w=1260&h=750&dpr=1" 
-             style="max-height:300px; width:80%; border-radius:10px; object-fit:cover;">
-    </div>
-    """, unsafe_allow_html=True)
-    
     st.markdown("""
     <div class="guide-box">
         <h3 style="color:#1E3A8A;">Guide d'utilisation:</h3>
