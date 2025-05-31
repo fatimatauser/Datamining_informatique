@@ -78,9 +78,9 @@ def apply_rfm(df):
 
 if uploaded_file:
     df, encoding = load_data(uploaded_file)
-st.success(f"Fichier chargé avec succès ✅ (encodage détecté : {encoding})")
-st.write("Aperçu des données :")
-st.dataframe(df.head())
+    st.success(f"Fichier chargé avec succès ✅ (encodage détecté : {encoding})")
+    st.write("Aperçu des données :")
+    st.dataframe(df.head())
 
     model_choice = st.sidebar.selectbox("Choisir une analyse", ["Statistiques descriptives", "FP-Growth", "K-means", "RFM"])
 
