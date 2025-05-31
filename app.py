@@ -5,7 +5,6 @@ import seaborn as sns
 from sklearn.cluster import KMeans
 from sklearn.preprocessing import StandardScaler
 from mlxtend.frequent_patterns import fpgrowth, association_rules
-import chardet
 
 st.set_page_config(page_title="Analyse Client", layout="wide")
 st.title("Application d'analyse e-commerce")
@@ -17,19 +16,9 @@ uploaded_file = st.sidebar.file_uploader("Uploader un fichier CSV ou Excel", typ
 @st.cache_data
 def load_data(file):
     if file.name.endswith('.csv'):
-        raw_data = file.read(10000)
-        encoding = chardet.detect(raw_data)['encoding']
-        file.seek(0)
-        try:
-            df = pd.read_csv(file, encoding=encoding)
-        except UnicodeDecodeError:
-            file.seek(0)
-            df = pd.read_csv(file, encoding='latin1')
-            encoding = 'latin1'
-        return df, encoding
+        return pd.read_csv(file)
     else:
-        df = pd.read_excel(file)
-        return df, 'Excel'
+        return pd.read_excel(file)
 
 def show_descriptive_stats(df):
     st.subheader("Statistiques descriptives")
@@ -77,8 +66,7 @@ def apply_rfm(df):
     st.pyplot(fig)
 
 if uploaded_file:
-    df, encoding = load_data(uploaded_file)
-    st.success(f"Fichier chargé avec succès ✅ (encodage détecté : {encoding})")
+    df = load_data(uploaded_file)
     st.write("Aperçu des données :")
     st.dataframe(df.head())
 
@@ -93,4 +81,4 @@ if uploaded_file:
     elif model_choice == "RFM":
         apply_rfm(df)
 else:
-    st.info("Veuillez charger un fichier pour commencer.") 
+    st.info("Veuillez charger un fichier pour commencer.")
