@@ -11,6 +11,8 @@ import plotly.express as px
 import numpy as np
 from sklearn.decomposition import PCA
 import base64
+from PIL import Image
+import io
 
 # Configuration de la page
 st.set_page_config(
@@ -67,26 +69,36 @@ st.markdown("""
         margin-top: 30px;
         border-top: 1px solid #1E3A8A;
     }
+    .guide-box {
+        background-color: #DBEAFE;
+        padding: 20px;
+        border-radius: 10px;
+        margin-top: 20px;
+    }
     </style>
     """, unsafe_allow_html=True)
 
-# Fonction pour encoder une image en base64
-def get_base64_image(image_path):
-    with open(image_path, "rb") as img_file:
-        return base64.b64encode(img_file.read()).decode()
+# Fonction pour créer des images de base64 intégrées
+def get_base64_image(image_url):
+    try:
+        response = requests.get(image_url)
+        img = Image.open(io.BytesIO(response.content))
+        buffered = io.BytesIO()
+        img.save(buffered, format="PNG")
+        return base64.b64encode(buffered.getvalue()).decode()
+    except:
+        return ""
 
-# Image encodée en base64 (remplacer par votre chemin d'image si nécessaire)
-# Si vous voulez utiliser une image locale, remplacez le code ci-dessous par:
-# header_image = get_base64_image("chemin/vers/votre/image.jpg")
-# Puis utilisez: st.markdown(f'<img src="data:image/png;base64,{header_image}" class="header-image">', unsafe_allow_html=True)
-
-# Utilisation d'une image en ligne pour l'en-tête
-HEADER_IMAGE_URL = "https://raw.githubusercontent.com/plotly/datasets/master/images/ecommerce-analytics.png"
-
-# Titre principal avec image d'en-tête
-st.markdown(f'<img src="{HEADER_IMAGE_URL}" class="header-image" style="max-height:300px">', unsafe_allow_html=True)
-st.title("📊 Plateforme d'Analyse Client e-commerce")
-st.markdown("***Analyse avancée des comportements clients et segmentation marketing***")
+# Titre principal avec image d'en-tête intégrée
+st.markdown("""
+<div style="text-align:center">
+    <h1 style="color:#1E3A8A;">📊 Plateforme d'Analyse Client e-commerce</h1>
+    <p style="font-size:1.2em;"><i>Analyse avancée des comportements clients et segmentation marketing</i></p>
+    <img src="https://images.pexels.com/photos/669615/pexels-photo-669615.jpeg?auto=compress&cs=tinysrgb&w=1260&h=750&dpr=1" 
+         class="header-image" 
+         style="max-height:300px; width:80%; object-fit:cover;">
+</div>
+""", unsafe_allow_html=True)
 
 # Sidebar
 with st.sidebar:
@@ -128,7 +140,7 @@ def show_descriptive_stats(df):
     
     with st.expander("Aperçu des données"):
         st.write(f"**Dimensions du dataset :** {df.shape[0]} lignes × {df.shape[1]} colonnes")
-        st.dataframe(df.head(3).style.set_properties(**{'background-color': '#EFF6FF'}))
+        st.dataframe(df.head(3).style.set_properties(**{'background-color': '#EFF6FF'})
     
     with st.expander("Résumé statistique"):
         st.write(df.describe().T.style.background_gradient(cmap='Blues'))
@@ -240,7 +252,6 @@ def apply_fp_growth(df):
         
     except Exception as e:
         st.error(f"Erreur dans l'analyse : {str(e)}")
-        st.exception(e)
 
 def apply_kmeans(df):
     st.header("👥 Segmentation client (K-means)")
@@ -248,7 +259,7 @@ def apply_kmeans(df):
     with st.expander("Paramètres", expanded=True):
         k = st.slider("Nombre de clusters", 2, 10, 4)
         num_cols = df.select_dtypes(include='number').columns
-        features = st.multiselect("Variables à inclure", num_cols, default=num_cols[:min(2, len(num_cols))] if len(num_cols) > 0 else [])
+        features = st.multiselect("Variables à inclure", num_cols, default=num_cols[:min(2, len(num_cols)] if len(num_cols) > 0 else [])
     
     if len(features) < 2:
         st.warning("Sélectionnez au moins 2 variables")
@@ -468,7 +479,6 @@ def apply_rfm(df):
         
     except Exception as e:
         st.error(f"Erreur dans le calcul RFM : {str(e)}")
-        st.exception(e)
 
 def assign_segment(score):
     if score >= 10:
@@ -499,9 +509,17 @@ if uploaded_file:
         apply_rfm(df)
 else:
     st.info("ℹ️ Veuillez télécharger un fichier CSV ou Excel pour commencer l'analyse")
-    st.image("https://raw.githubusercontent.com/plotly/datasets/master/images/ecommerce-dashboard.png", width=600)
+    
+    # Image intégrée avec lien direct
     st.markdown("""
-    <div style="background-color:#DBEAFE; padding:20px; border-radius:10px; margin-top:20px;">
+    <div style="text-align:center; margin:20px 0;">
+        <img src="https://images.pexels.com/photos/3944405/pexels-photo-3944405.jpeg?auto=compress&cs=tinysrgb&w=1260&h=750&dpr=1" 
+             style="max-height:300px; width:80%; border-radius:10px; object-fit:cover;">
+    </div>
+    """, unsafe_allow_html=True)
+    
+    st.markdown("""
+    <div class="guide-box">
         <h3 style="color:#1E3A8A;">Guide d'utilisation:</h3>
         <ol>
             <li>Téléchargez un fichier de données via le panneau latéral</li>
