@@ -5,6 +5,7 @@ import seaborn as sns
 from sklearn.cluster import KMeans
 from sklearn.preprocessing import StandardScaler
 from mlxtend.frequent_patterns import fpgrowth, association_rules
+from mlxtend.preprocessing import TransactionEncoder
 import chardet
 import plotly.express as px
 import numpy as np
@@ -121,12 +122,14 @@ def apply_fp_growth(df):
         min_support = st.slider("Support minimum", 0.01, 0.3, 0.02, 0.01)
     
     try:
+        # CORRECTION FP-GROWTH - Version robuste
         # Création des transactions sous forme de listes d'articles
-        transactions = df.groupby(transaction_col)[item_col].apply(list).reset_index(name='items')
+        transactions = df.groupby(transaction_col)[item_col].apply(list).tolist()
         
-        # Création de la matrice one-hot
-        basket = pd.get_dummies(transactions['items'].apply(pd.Series).stack().sum(level=0))
-        basket = basket.astype(bool).astype(int)
+        # Encodage des transactions
+        te = TransactionEncoder()
+        te_ary = te.fit(transactions).transform(transactions)
+        basket = pd.DataFrame(te_ary, columns=te.columns_)
         
         with st.spinner("Calcul des règles d'association..."):
             freq_items = fpgrowth(basket, min_support=min_support, use_colnames=True)
@@ -141,13 +144,21 @@ def apply_fp_growth(df):
         
         st.subheader("Top 10 des règles")
         top_rules = rules.sort_values('confidence', ascending=False).head(10)
-        st.dataframe(top_rules[['antecedents', 'consequents', 'support', 'confidence', 'lift']])
+        
+        # Formatage des règles pour l'affichage
+        top_rules_display = top_rules.copy()
+        top_rules_display['antecedents'] = top_rules_display['antecedents'].apply(lambda x: ', '.join(list(x)))
+        top_rules_display['consequents'] = top_rules_display['consequents'].apply(lambda x: ', '.join(list(x)))
+        
+        st.dataframe(top_rules_display[['antecedents', 'consequents', 'support', 'confidence', 'lift']])
         
         st.subheader("Visualisation")
         if not rules.empty:
-            top_rules['rule'] = top_rules['antecedents'].astype(str) + " => " + top_rules['consequents'].astype(str)
+            top_rules['rule'] = top_rules['antecedents'].apply(lambda x: ', '.join(list(x))) + " => " + top_rules['consequents'].apply(lambda x: ', '.join(list(x)))
+            top_rules['rule'] = top_rules['rule'].str.wrap(50)  # Wrapping pour une meilleure lisibilité
+            
             fig = px.scatter(
-                top_rules, 
+                top_rules.head(20), 
                 x='support', 
                 y='confidence', 
                 size='lift', 
@@ -157,15 +168,18 @@ def apply_fp_growth(df):
                     'support': 'Support',
                     'confidence': 'Confiance'
                 },
-                color_continuous_scale='blues'
+                color_continuous_scale='blues',
+                height=600
             )
-            fig.update_layout(height=600)
+            fig.update_traces(marker=dict(line=dict(width=1, color='DarkSlateGrey')))
+            fig.update_layout(hoverlabel=dict(bgcolor="white", font_size=14))
             st.plotly_chart(fig, use_container_width=True)
         else:
             st.warning("Aucune règle à afficher")
         
     except Exception as e:
         st.error(f"Erreur dans l'analyse : {str(e)}")
+        st.exception(e)
 
 def apply_kmeans(df):
     st.header("👥 Segmentation client (K-means)")
@@ -173,7 +187,7 @@ def apply_kmeans(df):
     with st.expander("Paramètres", expanded=True):
         k = st.slider("Nombre de clusters", 2, 10, 4)
         num_cols = df.select_dtypes(include='number').columns
-        features = st.multiselect("Variables à inclure", num_cols, default=num_cols[:min(2, len(num_cols))] if len(num_cols) > 0 else [])
+        features = st.multiselect("Variables à inclure", num_cols, default=num_cols[:min(2, len(num_cols)] if len(num_cols) > 0 else [])
     
     if len(features) < 2:
         st.warning("Sélectionnez au moins 2 variables")
@@ -187,7 +201,8 @@ def apply_kmeans(df):
         return
         
     X = temp_df[features]
-    X_scaled = StandardScaler().fit_transform(X)
+    scaler = StandardScaler()
+    X_scaled = scaler.fit_transform(X)
     
     with st.spinner("Création des clusters..."):
         model = KMeans(n_clusters=k, random_state=42, n_init=10)
@@ -226,7 +241,8 @@ def apply_kmeans(df):
                 y=features[1], 
                 color='Cluster',
                 color_continuous_scale='blues',
-                hover_data=features
+                hover_data=features,
+                title="Visualisation 2D des clusters"
             )
             st.plotly_chart(fig2, use_container_width=True)
         else:
@@ -264,32 +280,25 @@ def apply_rfm(df):
             monetary_col = st.selectbox("Colonne montant", df.columns)
     
     try:
-        # Vérification des types de données
-        if not pd.api.types.is_numeric_dtype(df[recency_col]):
-            st.error("La colonne 'Recence' doit être numérique")
-            return
-        if not pd.api.types.is_numeric_dtype(df[frequency_col]):
-            st.error("La colonne 'Fréquence' doit être numérique")
-            return
-        if not pd.api.types.is_numeric_dtype(df[monetary_col]):
-            st.error("La colonne 'Montant' doit être numérique")
-            return
-            
         # Création du dataframe RFM
         rfm = df[[recency_col, frequency_col, monetary_col]].copy()
         rfm.columns = ['Recence', 'Frequence', 'Montant']
         
-        # Suppression des valeurs négatives ou nulles
-        rfm = rfm[(rfm['Recence'] > 0) & (rfm['Frequence'] > 0) & (rfm['Montant'] > 0)]
+        # Conversion en numérique et gestion des erreurs
+        for col in ['Recence', 'Frequence', 'Montant']:
+            rfm[col] = pd.to_numeric(rfm[col], errors='coerce')
+        
+        # Suppression des valeurs manquantes
+        rfm = rfm.dropna()
         
         if rfm.empty:
-            st.error("Aucune donnée valide après filtrage des valeurs négatives/nulles.")
+            st.error("Aucune donnée valide après nettoyage.")
             return
             
         # Calcul des quantiles
-        rfm['R'] = pd.qcut(rfm['Recence'], 4, labels=[4, 3, 2, 1])
-        rfm['F'] = pd.qcut(rfm['Frequence'], 4, labels=[1, 2, 3, 4])
-        rfm['M'] = pd.qcut(rfm['Montant'], 4, labels=[1, 2, 3, 4])
+        rfm['R'] = pd.qcut(rfm['Recence'], 4, labels=range(4, 0, -1))
+        rfm['F'] = pd.qcut(rfm['Frequence'], 4, labels=range(1, 5))
+        rfm['M'] = pd.qcut(rfm['Montant'], 4, labels=range(1, 5))
         
         # Conversion en numérique
         rfm['R'] = rfm['R'].astype(int)
@@ -311,7 +320,8 @@ def apply_rfm(df):
             color=segment_counts.values,
             color_continuous_scale='blues',
             labels={'x': 'Segment RFM', 'y': 'Nombre de clients'},
-            text=segment_counts.values
+            text=segment_counts.values,
+            title="Répartition des clients par segment RFM"
         )
         fig1.update_traces(texttemplate='%{text}', textposition='outside')
         st.plotly_chart(fig1, use_container_width=True)
@@ -320,23 +330,42 @@ def apply_rfm(df):
         segment_analysis = rfm.groupby('Segment').agg({
             'Recence': 'mean',
             'Frequence': 'mean',
-            'Montant': 'mean'
+            'Montant': 'mean',
+            'RFM_Score': 'mean'
         }).reset_index()
-        segment_analysis.columns = ['Segment', 'Recence moyenne', 'Frequence moyenne', 'Montant moyen']
+        segment_analysis.columns = ['Segment', 'Recence moyenne', 'Frequence moyenne', 'Montant moyen', 'Score RFM moyen']
         
         fig2 = px.scatter(
             segment_analysis,
             x='Recence moyenne',
             y='Montant moyen',
             size='Frequence moyenne',
-            color='Segment',
+            color='Score RFM moyen',
             hover_name='Segment',
-            size_max=60
+            size_max=60,
+            color_continuous_scale='blues',
+            title="Analyse des segments RFM"
         )
         st.plotly_chart(fig2, use_container_width=True)
         
+        st.subheader("Recommandations par segment")
+        recommendations = {
+            "Champions": "Offres premium, programme fidélité, nouveaux produits",
+            "Fidèles": "Cross-selling, offres de réengagement, rabais",
+            "Potentiels": "Promotions ciblées, paniers abandonnés, contenu éducatif",
+            "Nouveaux": "Bienvenue, tutoriels, première offre spéciale",
+            "Dormants": "Campagnes de réactivation, offres spéciales, enquêtes"
+        }
+        
+        rec_df = pd.DataFrame({
+            'Segment': recommendations.keys(),
+            'Recommandation': recommendations.values()
+        })
+        st.table(rec_df)
+        
     except Exception as e:
         st.error(f"Erreur dans le calcul RFM : {str(e)}")
+        st.exception(e)
 
 def assign_segment(score):
     if score >= 10:
@@ -367,7 +396,7 @@ if uploaded_file:
         apply_rfm(df)
 else:
     st.info("ℹ️ Veuillez télécharger un fichier CSV ou Excel pour commencer l'analyse")
-    st.image("https://cdn-icons-png.flaticon.com/512/3587/3587089.png", width=200)
+    st.image("https://cdn-icons-png.flaticon.com/512/3587/3587089.png", width=100)
     st.markdown("""
     ### Guide d'utilisation:
     1. Téléchargez un fichier de données via le panneau latéral
