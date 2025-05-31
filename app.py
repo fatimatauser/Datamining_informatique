@@ -396,7 +396,7 @@ if uploaded_file:
         apply_rfm(df)
 else:
     st.info("ℹ️ Veuillez télécharger un fichier CSV ou Excel pour commencer l'analyse")
-    st.image("https://cdn-icons-png.flaticon.com/512/3587/3587089.png", width=100)
+    st.image("https://cdn-icons-png.flaticon.com/512/3587/3587089.png", width=50)
     st.markdown("""
     ### Guide d'utilisation:
     1. Téléchargez un fichier de données via le panneau latéral
