@@ -9,3 +9,4 @@ mlxtend
 streamlit
 datetime
 openpyxl
+chardet
