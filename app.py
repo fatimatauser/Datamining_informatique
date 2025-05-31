@@ -125,7 +125,7 @@ def apply_fp_growth(df):
         transactions = df.groupby(transaction_col)[item_col].apply(list).reset_index(name='items')
         
         # Création de la matrice one-hot
-        basket = pd.get_dummies(transactions['items'].apply(pd.Series).stack().sum(level=0)
+        basket = pd.get_dummies(transactions['items'].apply(pd.Series).stack().sum(level=0))
         basket = basket.astype(bool).astype(int)
         
         with st.spinner("Calcul des règles d'association..."):
