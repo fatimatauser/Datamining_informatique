@@ -93,4 +93,4 @@ if uploaded_file:
     elif model_choice == "RFM":
         apply_rfm(df)
 else:
-    st.info("Veuillez charger un fichier pour commencer.") voici mon app.py rend le joli
+    st.info("Veuillez charger un fichier pour commencer.") 
