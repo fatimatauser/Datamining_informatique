@@ -259,7 +259,7 @@ def apply_kmeans(df):
     with st.expander("Paramètres", expanded=True):
         k = st.slider("Nombre de clusters", 2, 10, 4)
         num_cols = df.select_dtypes(include='number').columns
-        features = st.multiselect("Variables à inclure", num_cols, default=num_cols[:min(2, len(num_cols)] if len(num_cols) > 0 else [])
+        features = st.multiselect("Variables à inclure", num_cols, default=num_cols[:min(2, len(num_cols))] if len(num_cols) > 0 else [])
     
     if len(features) < 2:
         st.warning("Sélectionnez au moins 2 variables")
