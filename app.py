@@ -140,7 +140,7 @@ def show_descriptive_stats(df):
     
     with st.expander("Aperçu des données"):
         st.write(f"**Dimensions du dataset :** {df.shape[0]} lignes × {df.shape[1]} colonnes")
-        st.dataframe(df.head(3).style.set_properties(**{'background-color': '#EFF6FF'})
+        st.dataframe(df.head(3).style.set_properties(**{'background-color': '#EFF6FF'}))
     
     with st.expander("Résumé statistique"):
         st.write(df.describe().T.style.background_gradient(cmap='Blues'))
