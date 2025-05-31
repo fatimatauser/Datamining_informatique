@@ -10,6 +10,7 @@ import chardet
 import plotly.express as px
 import numpy as np
 from sklearn.decomposition import PCA
+import base64
 
 # Configuration de la page
 st.set_page_config(
@@ -24,6 +25,7 @@ st.markdown("""
     <style>
     .main {
         background-color: #F9F9F9;
+        background-image: linear-gradient(to bottom, #ffffff, #e6f0ff);
     }
     h1 {
         color: #1E3A8A;
@@ -32,24 +34,57 @@ st.markdown("""
     }
     .sidebar .sidebar-content {
         background-color: #EFF6FF;
+        background-image: linear-gradient(to bottom, #ffffff, #d1e0ff);
     }
     .stButton>button {
         background-color: #1E3A8A;
         color: white;
         border-radius: 5px;
+        font-weight: bold;
     }
     .stSelectbox>div>div>select {
         background-color: #EFF6FF;
+        border: 1px solid #1E3A8A;
     }
     .css-1aumxhk {
         background-color: #DBEAFE;
         border-radius: 10px;
         padding: 15px;
+        box-shadow: 0 4px 6px rgba(0,0,0,0.1);
+    }
+    .header-image {
+        display: block;
+        margin: 0 auto;
+        max-width: 100%;
+        border-radius: 10px;
+        box-shadow: 0 4px 8px rgba(0,0,0,0.2);
+    }
+    .footer {
+        text-align: center;
+        padding: 15px;
+        font-size: 0.9em;
+        color: #555555;
+        margin-top: 30px;
+        border-top: 1px solid #1E3A8A;
     }
     </style>
     """, unsafe_allow_html=True)
 
-# Titre principal
+# Fonction pour encoder une image en base64
+def get_base64_image(image_path):
+    with open(image_path, "rb") as img_file:
+        return base64.b64encode(img_file.read()).decode()
+
+# Image encodée en base64 (remplacer par votre chemin d'image si nécessaire)
+# Si vous voulez utiliser une image locale, remplacez le code ci-dessous par:
+# header_image = get_base64_image("chemin/vers/votre/image.jpg")
+# Puis utilisez: st.markdown(f'<img src="data:image/png;base64,{header_image}" class="header-image">', unsafe_allow_html=True)
+
+# Utilisation d'une image en ligne pour l'en-tête
+HEADER_IMAGE_URL = "https://raw.githubusercontent.com/plotly/datasets/master/images/ecommerce-analytics.png"
+
+# Titre principal avec image d'en-tête
+st.markdown(f'<img src="{HEADER_IMAGE_URL}" class="header-image" style="max-height:300px">', unsafe_allow_html=True)
 st.title("📊 Plateforme d'Analyse Client e-commerce")
 st.markdown("***Analyse avancée des comportements clients et segmentation marketing***")
 
@@ -93,7 +128,7 @@ def show_descriptive_stats(df):
     
     with st.expander("Aperçu des données"):
         st.write(f"**Dimensions du dataset :** {df.shape[0]} lignes × {df.shape[1]} colonnes")
-        st.dataframe(df.head(3))
+        st.dataframe(df.head(3).style.set_properties(**{'background-color': '#EFF6FF'}))
     
     with st.expander("Résumé statistique"):
         st.write(df.describe().T.style.background_gradient(cmap='Blues'))
@@ -108,6 +143,16 @@ def show_descriptive_stats(df):
             st.pyplot(fig)
         else:
             st.warning("Aucune variable numérique détectée")
+            
+    with st.expander("Corrélations"):
+        if len(num_cols) > 1:
+            corr_matrix = df[num_cols].corr()
+            fig, ax = plt.subplots(figsize=(10,6))
+            sns.heatmap(corr_matrix, annot=True, cmap='Blues', fmt=".2f", linewidths=.5)
+            plt.title('Matrice de corrélation')
+            st.pyplot(fig)
+        else:
+            st.warning("Pas assez de variables numériques pour la matrice de corrélation")
 
 def apply_fp_growth(df):
     st.header("🛒 Analyse de panier (FP-Growth)")
@@ -120,9 +165,9 @@ def apply_fp_growth(df):
             item_col = st.selectbox("Colonne produit", df.columns)
             
         min_support = st.slider("Support minimum", 0.01, 0.3, 0.02, 0.01)
+        min_threshold = st.slider("Seuil de confiance minimum", 0.1, 1.0, 0.5, 0.05)
     
     try:
-        # CORRECTION FP-GROWTH - Version robuste
         # Création des transactions sous forme de listes d'articles
         transactions = df.groupby(transaction_col)[item_col].apply(list).tolist()
         
@@ -138,25 +183,26 @@ def apply_fp_growth(df):
                 st.warning("Aucun ensemble fréquent trouvé. Essayez de réduire le support minimum.")
                 return
                 
-            rules = association_rules(freq_items, metric="lift", min_threshold=1)
+            rules = association_rules(freq_items, metric="confidence", min_threshold=min_threshold)
             
         st.success(f"{len(rules)} règles générées avec succès!")
         
         st.subheader("Top 10 des règles")
-        top_rules = rules.sort_values('confidence', ascending=False).head(10)
+        top_rules = rules.sort_values('lift', ascending=False).head(10)
         
         # Formatage des règles pour l'affichage
         top_rules_display = top_rules.copy()
         top_rules_display['antecedents'] = top_rules_display['antecedents'].apply(lambda x: ', '.join(list(x)))
         top_rules_display['consequents'] = top_rules_display['consequents'].apply(lambda x: ', '.join(list(x)))
         
-        st.dataframe(top_rules_display[['antecedents', 'consequents', 'support', 'confidence', 'lift']])
+        st.dataframe(top_rules_display[['antecedents', 'consequents', 'support', 'confidence', 'lift']].style.background_gradient(cmap='Blues'))
         
-        st.subheader("Visualisation")
+        st.subheader("Visualisation des règles")
         if not rules.empty:
             top_rules['rule'] = top_rules['antecedents'].apply(lambda x: ', '.join(list(x))) + " => " + top_rules['consequents'].apply(lambda x: ', '.join(list(x)))
             top_rules['rule'] = top_rules['rule'].str.wrap(50)  # Wrapping pour une meilleure lisibilité
             
+            # Graphique 1: Nuage de points des règles
             fig = px.scatter(
                 top_rules.head(20), 
                 x='support', 
@@ -169,11 +215,26 @@ def apply_fp_growth(df):
                     'confidence': 'Confiance'
                 },
                 color_continuous_scale='blues',
-                height=600
+                height=600,
+                title="Relations entre support, confiance et lift"
             )
             fig.update_traces(marker=dict(line=dict(width=1, color='DarkSlateGrey')))
             fig.update_layout(hoverlabel=dict(bgcolor="white", font_size=14))
             st.plotly_chart(fig, use_container_width=True)
+            
+            # Graphique 2: Top 10 des règles par lift
+            top_rules_sorted = top_rules.sort_values('lift', ascending=False).head(10)
+            fig2 = px.bar(
+                top_rules_sorted,
+                x='rule',
+                y='lift',
+                color='lift',
+                color_continuous_scale='blues',
+                labels={'rule': 'Règles', 'lift': 'Lift'},
+                title="Top 10 des règles par valeur de Lift"
+            )
+            fig2.update_layout(xaxis_tickangle=-45)
+            st.plotly_chart(fig2, use_container_width=True)
         else:
             st.warning("Aucune règle à afficher")
         
@@ -187,7 +248,7 @@ def apply_kmeans(df):
     with st.expander("Paramètres", expanded=True):
         k = st.slider("Nombre de clusters", 2, 10, 4)
         num_cols = df.select_dtypes(include='number').columns
-        features = st.multiselect("Variables à inclure", num_cols, default=num_cols[:min(2, len(num_cols))] if len(num_cols) > 0 else [])
+        features = st.multiselect("Variables à inclure", num_cols, default=num_cols[:min(2, len(num_cols)] if len(num_cols) > 0 else [])
     
     if len(features) < 2:
         st.warning("Sélectionnez au moins 2 variables")
@@ -205,7 +266,7 @@ def apply_kmeans(df):
     X_scaled = scaler.fit_transform(X)
     
     with st.spinner("Création des clusters..."):
-        model = KMeans(n_clusters=k, random_state=42, n_init=10)
+        model = KMeans(n_clusters=k, random_state=42, n_init='auto')
         clusters = model.fit_predict(X_scaled)
         temp_df['Cluster'] = clusters
         
@@ -219,11 +280,14 @@ def apply_kmeans(df):
     with c1:
         st.subheader("Distribution des clusters")
         cluster_counts = temp_df['Cluster'].value_counts().sort_index()
-        fig1, ax1 = plt.subplots()
+        fig1, ax1 = plt.subplots(figsize=(8, 6))
         ax1.pie(cluster_counts, 
                 labels=cluster_counts.index, 
                 colors=sns.color_palette("Blues", k),
-                autopct='%1.1f%%')
+                autopct='%1.1f%%',
+                startangle=90,
+                shadow=True)
+        ax1.axis('equal')
         st.pyplot(fig1)
         
         st.subheader("Caractéristiques des clusters")
@@ -240,10 +304,11 @@ def apply_kmeans(df):
                 x=features[0], 
                 y=features[1], 
                 color='Cluster',
-                color_continuous_scale='blues',
+                color_discrete_sequence=px.colors.sequential.Blues_r,
                 hover_data=features,
                 title="Visualisation 2D des clusters"
             )
+            fig2.update_traces(marker=dict(size=8, line=dict(width=1, color='DarkSlateGrey')))
             st.plotly_chart(fig2, use_container_width=True)
         else:
             # PCA pour la réduction de dimension si plus de 2 features
@@ -257,15 +322,37 @@ def apply_kmeans(df):
                 x='PCA1', 
                 y='PCA2', 
                 color='Cluster',
-                color_continuous_scale='blues',
+                color_discrete_sequence=px.colors.sequential.Blues_r,
                 hover_data=features,
                 title="Projection PCA (2D) des clusters"
             )
+            fig2.update_traces(marker=dict(size=8, line=dict(width=1, color='DarkSlateGrey')))
             st.plotly_chart(fig2, use_container_width=True)
             
             # Variance expliquée
             var_ratio = pca.explained_variance_ratio_
             st.caption(f"Variance expliquée : PCA1 = {var_ratio[0]*100:.1f}%, PCA2 = {var_ratio[1]*100:.1f}%")
+            
+            # Graphique 3D optionnel
+            if len(features) > 2:
+                st.subheader("Visualisation 3D")
+                pca3d = PCA(n_components=3)
+                pca3d_result = pca3d.fit_transform(X_scaled)
+                temp_df['PCA1_3d'] = pca3d_result[:, 0]
+                temp_df['PCA2_3d'] = pca3d_result[:, 1]
+                temp_df['PCA3_3d'] = pca3d_result[:, 2]
+                
+                fig3d = px.scatter_3d(
+                    temp_df,
+                    x='PCA1_3d',
+                    y='PCA2_3d',
+                    z='PCA3_3d',
+                    color='Cluster',
+                    color_discrete_sequence=px.colors.sequential.Blues_r,
+                    hover_data=features,
+                    title="Projection 3D des clusters"
+                )
+                st.plotly_chart(fig3d, use_container_width=True)
 
 def apply_rfm(df):
     st.header("💰 Analyse RFM")
@@ -295,10 +382,10 @@ def apply_rfm(df):
             st.error("Aucune donnée valide après nettoyage.")
             return
             
-        # Calcul des quantiles
-        rfm['R'] = pd.qcut(rfm['Recence'], 4, labels=range(4, 0, -1))
-        rfm['F'] = pd.qcut(rfm['Frequence'], 4, labels=range(1, 5))
-        rfm['M'] = pd.qcut(rfm['Montant'], 4, labels=range(1, 5))
+        # Calcul des scores RFM
+        rfm['R'] = pd.qcut(rfm['Recence'], 4, labels=[4, 3, 2, 1])
+        rfm['F'] = pd.qcut(rfm['Frequence'], 4, labels=[1, 2, 3, 4])
+        rfm['M'] = pd.qcut(rfm['Montant'], 4, labels=[1, 2, 3, 4])
         
         # Conversion en numérique
         rfm['R'] = rfm['R'].astype(int)
@@ -348,6 +435,22 @@ def apply_rfm(df):
         )
         st.plotly_chart(fig2, use_container_width=True)
         
+        st.subheader("Carte thermique RFM")
+        rfm_agg = rfm.groupby('Segment').agg({
+            'Recence': 'mean',
+            'Frequence': 'mean',
+            'Montant': 'mean'
+        })
+        fig3 = px.imshow(
+            rfm_agg.T,
+            text_auto=".1f",
+            aspect="auto",
+            color_continuous_scale='blues',
+            labels=dict(x="Segment", y="Métrique", color="Valeur"),
+            title="Moyennes RFM par segment"
+        )
+        st.plotly_chart(fig3, use_container_width=True)
+        
         st.subheader("Recommandations par segment")
         recommendations = {
             "Champions": "Offres premium, programme fidélité, nouveaux produits",
@@ -361,7 +464,7 @@ def apply_rfm(df):
             'Segment': recommendations.keys(),
             'Recommandation': recommendations.values()
         })
-        st.table(rec_df)
+        st.table(rec_df.style.set_properties(**{'background-color': '#DBEAFE'}))
         
     except Exception as e:
         st.error(f"Erreur dans le calcul RFM : {str(e)}")
@@ -396,16 +499,25 @@ if uploaded_file:
         apply_rfm(df)
 else:
     st.info("ℹ️ Veuillez télécharger un fichier CSV ou Excel pour commencer l'analyse")
-    st.image("https://cdn-icons-png.flaticon.com/512/3587/3587089.png", width=30)
-    st.markdown(""" ### Guide d'utilisation:
-    1. Téléchargez un fichier de données via le panneau latéral
-    2. Sélectionnez une méthode d'analyse
-    3. Configurez les paramètres spécifiques
-    4. Explorez les résultats visuels
-    
-    *Exemple de données compatibles : données transactionnelles e-commerce*
-    """)
+    st.image("https://raw.githubusercontent.com/plotly/datasets/master/images/ecommerce-dashboard.png", width=600)
+    st.markdown("""
+    <div style="background-color:#DBEAFE; padding:20px; border-radius:10px; margin-top:20px;">
+        <h3 style="color:#1E3A8A;">Guide d'utilisation:</h3>
+        <ol>
+            <li>Téléchargez un fichier de données via le panneau latéral</li>
+            <li>Sélectionnez une méthode d'analyse</li>
+            <li>Configurez les paramètres spécifiques</li>
+            <li>Explorez les résultats visuels</li>
+        </ol>
+        <p><i>Exemple de données compatibles : données transactionnelles e-commerce</i></p>
+    </div>
+    """, unsafe_allow_html=True)
 
 # Footer
 st.markdown("---")
-st.markdown("📱 Application développée avec Streamlit | © 2023 - Analyse Client e-commerce")
+st.markdown("""
+<div class="footer">
+    <p>📱 Application développée avec Streamlit | © 2023 - Analyse Client e-commerce</p>
+    <p style="font-size:0.8em;">Plateforme d'analyse avancée pour optimiser votre stratégie e-commerce</p>
+</div>
+""", unsafe_allow_html=True)
