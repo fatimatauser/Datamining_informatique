@@ -10,3 +10,4 @@ streamlit
 datetime
 openpyxl
 squarify
+chardet
