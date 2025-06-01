@@ -100,7 +100,7 @@ def global_stats(df):
         ]
     }
 
-    return pd.DataFrame(stats) Isseu Gueye, [1/06/2025 à 08:27]
+    return pd.DataFrame(stats) 
 def show_descriptive_stats(df):
     """Affiche des statistiques descriptives complètes avec visualisations"""
     st.header("📊 Analyse Descriptive Complète")
