@@ -9,4 +9,4 @@ mlxtend
 streamlit
 datetime
 openpyxl
-chardet
+squarify
