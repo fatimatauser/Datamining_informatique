@@ -1,4 +1,3 @@
-
 import streamlit as st
 import pandas as pd
 import numpy as np
@@ -30,7 +29,7 @@ st.set_page_config(
 
 # Fonctions utilitaires
 def load_data(uploaded_file):
-    """Charge les données depuis un fichier uploadé"""
+    """Charge les données depuis un fichier téléchargé"""
     try:
         if uploaded_file.name.endswith('.csv'):
             # Essayer différents encodages
@@ -1011,7 +1010,7 @@ def main():
                 else:
                     st.info("Veuillez d'abord nettoyer les données dans l'onglet Statistiques")
     else:
-        st.info("Veuillez uploader un fichier de données pour commencer l'analyse")
+        st.info("Veuillez télécharger un fichier de données pour commencer l'analyse")
 
 if __name__ == "__main__":
     main()
