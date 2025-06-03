@@ -15,6 +15,8 @@ from sklearn.metrics import silhouette_score, adjusted_rand_score
 from sklearn.decomposition import PCA
 from sklearn import metrics
 import warnings
+import matplotlib.cm as cm
+from sklearn.exceptions import UndefinedMetricWarning
 
 # Ignorer les warnings
 warnings.filterwarnings("ignore")
@@ -34,9 +36,12 @@ def load_data(uploaded_file):
         if uploaded_file.name.endswith('.csv'):
             # Essayer différents encodages
             try:
-                df = pd.read_csv(uploaded_file, encoding="ISO-8859-1")
-            except:
                 df = pd.read_csv(uploaded_file, encoding="utf-8")
+            except:
+                try:
+                    df = pd.read_csv(uploaded_file, encoding="ISO-8859-1")
+                except:
+                    df = pd.read_csv(uploaded_file, encoding="latin1")
         elif uploaded_file.name.endswith(('.xls', '.xlsx')):
             df = pd.read_excel(uploaded_file)
         else:
@@ -342,11 +347,13 @@ def perform_fpgrowth_analysis(df):
         try:
             # Création du panier
             basket = df.groupby(['InvoiceNo', 'Description'])['Quantity'].count().unstack().fillna(0)
-            basket = basket.applymap(lambda x: 1 if x > 0 else 0)
-           
+            
+            # Optimisation: conversion vectorisée
+            basket = (basket > 0).astype(int)
+            
             # Supprimer les colonnes avec des noms manquants
             basket = basket.loc[:, ~basket.columns.isin([np.nan, None, ''])]
-           
+            
             # Limiter aux colonnes les plus fréquentes si trop nombreuses
             if len(basket.columns) > 100:
                 st.warning("Trop de produits ({}). Utilisation des 100 plus fréquents.".format(len(basket.columns)))
@@ -458,7 +465,7 @@ def perform_kmeans_analysis(df):
             'InvoiceNo': 'nunique',
             'Montant': 'sum'
         }).reset_index()
-        rfm.columns = ['CustomerID', 'Recence', 'Frequence', 'Montant']
+        rfm.columns = ['CustomerID', 'Recence', 'Frequence', 'MontantTotal']  # Nom corrigé
         df_rfm = rfm
     else:
         st.warning("Colonnes manquantes pour le calcul RFM. Utilisation de toutes les colonnes numériques.")
@@ -558,13 +565,23 @@ def perform_kmeans_analysis(df):
             with st.spinner("Clustering en cours..."):
                 kmeans = KMeans(n_clusters=n_clusters, init='k-means++', random_state=42, n_init=10)
                 clusters = kmeans.fit_predict(st.session_state.scaled_data)
-                silhouette_avg = silhouette_score(st.session_state.scaled_data, clusters)
-               
+                
+                # Gestion des clusters vides
+                with warnings.catch_warnings():
+                    warnings.filterwarnings("ignore", category=UndefinedMetricWarning)
+                    try:
+                        silhouette_avg = silhouette_score(st.session_state.scaled_data, clusters)
+                    except:
+                        silhouette_avg = -1
+                
                 # Ajout des clusters aux données
                 df_clustered = st.session_state.df_rfm_clean.copy()
                 df_clustered['Cluster'] = clusters
            
-            st.success(f"Clustering terminé! Score de silhouette: {silhouette_avg:.3f}")
+            if silhouette_avg != -1:
+                st.success(f"Clustering terminé! Score de silhouette: {silhouette_avg:.3f}")
+            else:
+                st.warning("Clustering terminé mais échec du calcul du score de silhouette (peut-être un cluster vide).")
            
             # Visualisation des clusters
             st.subheader("Visualisation des Clusters")
@@ -585,7 +602,7 @@ def perform_kmeans_analysis(df):
             cluster_profile = df_clustered.groupby('Cluster').agg({
                 'Recence': ['mean', 'min', 'max'],
                 'Frequence': ['mean', 'min', 'max'],
-                'Montant': ['mean', 'min', 'max'],
+                'MontantTotal': ['mean', 'min', 'max'],
                 'CustomerID': 'count'
             }).reset_index()
            
@@ -597,7 +614,7 @@ def perform_kmeans_analysis(df):
                 cluster_data = df_clustered[df_clustered['Cluster'] == cluster]
                 recence_moy = cluster_data['Recence'].mean()
                 frequence_moy = cluster_data['Frequence'].mean()
-                montant_moy = cluster_data['Montant'].mean()
+                montant_moy = cluster_data['MontantTotal'].mean()
                
                 st.markdown(f"**Cluster {cluster}** (Nombre: {len(cluster_data)})")
                 st.markdown(f"- Récence moyenne: {recence_moy:.1f} jours")
@@ -623,7 +640,13 @@ def perform_kmeans_analysis(df):
            
             # Fonctions pour l'étude de stabilité
             def echantillonnage(df, n, pas=30, duree=180):
+                if df['InvoiceDate'].isnull().all():
+                    return pd.DataFrame()
+                
                 date_min = df['InvoiceDate'].min()
+                if pd.isnull(date_min):
+                    return pd.DataFrame()
+                    
                 date_min = date_min + timedelta(days=pas * (n-1))
                 date_max = date_min + timedelta(days=duree)
                
@@ -660,6 +683,9 @@ def perform_kmeans_analysis(df):
                     samples = {}
                     for n in range(1, 10):
                         sample_df = echantillonnage(df, n)
+                        if sample_df.empty:
+                            st.warning(f"Échantillon {n} vide - arrêt de la création d'échantillons")
+                            break
                         sample_rfm = prepare_data(sample_df)
                         if sample_rfm is not None:
                             samples[f"B{n-1}"] = sample_rfm
@@ -789,7 +815,7 @@ def perform_kmeans_analysis(df):
 def perform_rfm_analysis(df):
     """Effectue l'analyse RFM"""
     # Vérification des colonnes nécessaires
-    required_cols = ['CustomerID', 'InvoiceDate', 'InvoiceNo', 'Montant']
+    required_cols = ['CustomerID', 'InvoiceDate', 'InvoiceNo']
     if 'Montant' not in df.columns:
         if 'Quantity' in df.columns and 'UnitPrice' in df.columns:
             df['Montant'] = df['Quantity'] * df['UnitPrice']
@@ -820,10 +846,10 @@ def perform_rfm_analysis(df):
         'Montant': 'sum'
     }).reset_index()
    
-    rfm.columns = ['CustomerID', 'Recence', 'Frequence', 'Montant']
+    rfm.columns = ['CustomerID', 'Recence', 'Frequence', 'MontantTotal']
    
     # Calcul des quartiles
-    quantiles = rfm[['Recence', 'Frequence', 'Montant']].quantile([0.25, 0.5, 0.75])
+    quantiles = rfm[['Recence', 'Frequence', 'MontantTotal']].quantile([0.25, 0.5, 0.75])
     quantiles = quantiles.to_dict()
    
     # Fonctions de scoring
@@ -850,21 +876,19 @@ def perform_rfm_analysis(df):
     # Application des scores
     rfm['R'] = rfm['Recence'].apply(r_score)
     rfm['F'] = rfm['Frequence'].apply(lambda x: fm_score(x, 'Frequence'))
-    rfm['M'] = rfm['Montant'].apply(lambda x: fm_score(x, 'Montant'))
+    rfm['M'] = rfm['MontantTotal'].apply(lambda x: fm_score(x, 'MontantTotal'))
     rfm['RFM_Score'] = rfm['R'].map(str) + rfm['F'].map(str) + rfm['M'].map(str)
    
-    # Segmentation
+    # Segmentation CORRIGÉE
     contrat = {
-        r'[1-2][1-2]': 'en hibernation',
-        r'[1-2][3-4]': 'à risque',
-        r'[1-2]5': 'à ne pas perdre',
-        r'3[1-2]': 'sur le point de dormir',
-        r'33': 'nécessite de l\'attention',
-        r'[3-4][4-5]': 'clients fidèles',
-        r'41': 'prometteurs',
-        r'51': 'nouveaux clients',
-        r'[4-5][2-3]': 'clients potentiellement fidèles',
-        r'5[4-5]': 'champions'
+        r'1[1-2]': 'en hibernation',
+        r'1[3-4]': 'à risque',
+        r'2[1-2]': 'sur le point de dormir',
+        r'2[3-4]': 'nécessite de l\'attention',
+        r'3[1-2]': 'prometteurs',
+        r'3[3-4]': 'clients potentiellement fidèles',
+        r'4[1-2]': 'clients fidèles',
+        r'4[3-4]': 'champions'
     }
    
     rfm['Segment'] = rfm['R'].map(str) + rfm['F'].map(str)
@@ -900,12 +924,13 @@ def perform_rfm_analysis(df):
         )
         st.plotly_chart(fig2, use_container_width=True)
    
-    # Treemap
+    # Treemap avec couleurs dynamiques
     st.subheader("Treemap des Segments RFM")
     plt.figure(figsize=(12, 8))
-    colors = ['#f94144', '#f3722c', '#f9c74f', '#90be6d', '#43aa8b',
-              '#577590', '#277da1', '#4d908e', '#f9844a', '#8ac926']
-   
+    
+    # Générer des couleurs dynamiques
+    colors = cm.tab10(np.linspace(0, 1, len(segment_counts)))
+    
     squarify.plot(
         sizes=segment_counts['Nombre de Clients'],
         label=segment_counts['Segment'],
@@ -924,12 +949,10 @@ def perform_rfm_analysis(df):
         'champions': "Récompenser, offres exclusives, programmes VIP",
         'clients fidèles': "Fidélisation, offres personnalisées",
         'clients potentiellement fidèles': "Encourager à acheter plus",
-        'à ne pas perdre': "Offres spéciales, attention particulière",
         'prometteurs': "Encourager à devenir fidèles",
         'à risque': "Campagnes de réactivation",
         'sur le point de dormir': "Relances par email, offres de retour",
         'nécessite de l\'attention': "Offres ciblées, rappels",
-        'nouveaux clients': "Bienvenue, guide d'utilisation",
         'en hibernation': "Campagnes agressives de réactivation"
     }
    
@@ -972,19 +995,14 @@ def main():
                 safe_display_dataframe(stats_df)
                
                 # Nettoyage des données
-                if st.button("Nettoyer les données", key="clean_data_btn"):
-                    with st.spinner("Nettoyage en cours..."):
-                        df_clean = clean_data(df)
-                    st.success("Données nettoyées avec succès!")
-                    st.session_state.df_clean = df_clean
-               
-                # Afficher les stats descriptives si données nettoyées
+                if 'df_clean' not in st.session_state:
+                    with st.spinner("Nettoyage initial des données..."):
+                        st.session_state.df_clean = clean_data(df)
+                
                 if 'df_clean' in st.session_state:
                     st.header("Données Après Nettoyage")
                     st.write(f"Dimensions: {st.session_state.df_clean.shape[0]} lignes, {st.session_state.df_clean.shape[1]} colonnes")
                     show_descriptive_stats(st.session_state.df_clean)
-                else:
-                    st.info("Cliquez sur 'Nettoyer les données' pour commencer l'analyse")
            
             # Onglet FP-Growth
             with tab_fp:
