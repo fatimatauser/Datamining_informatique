@@ -19,6 +19,7 @@ import matplotlib.cm as cm
 from sklearn.exceptions import UndefinedMetricWarning
 import dask.dataframe as dd
 from dask.diagnostics import ProgressBar
+import chardet
 
 # Ignorer les warnings
 warnings.filterwarnings("ignore")
@@ -32,6 +33,13 @@ st.set_page_config(
 )
 
 # Fonctions utilitaires
+def detect_encoding(uploaded_file):
+    """Détecte l'encodage d'un fichier"""
+    raw_data = uploaded_file.read(10000)  # Lire un échantillon pour la détection
+    uploaded_file.seek(0)  # Réinitialiser la position du fichier
+    result = chardet.detect(raw_data)
+    return result['encoding']
+
 def load_data(uploaded_file):
     """Charge les données depuis un fichier téléchargé avec Dask pour les gros fichiers"""
     try:
@@ -41,27 +49,40 @@ def load_data(uploaded_file):
             f.write(uploaded_file.getvalue())
         
         if uploaded_file.name.endswith('.csv'):
-            # Charger avec Dask pour les gros fichiers CSV
+            # Détection automatique de l'encodage
+            encoding = detect_encoding(uploaded_file)
+            st.info(f"Encodage détecté: {encoding}")
+            
+            # Charger avec Dask
             try:
                 df = dd.read_csv(
                     file_path,
-                    encoding="utf-8",
-                    dtype={'CustomerID': 'float64', 'InvoiceNo': 'object'}
+                    encoding=encoding,
+                    dtype={'CustomerID': 'float64', 'InvoiceNo': 'object'},
+                    assume_missing=True,
+                    on_bad_lines='warn'
                 )
-            except:
-                try:
-                    df = dd.read_csv(
-                        file_path,
-                        encoding="ISO-8859-1",
-                        dtype={'CustomerID': 'float64', 'InvoiceNo': 'object'}
-                    )
-                except:
-                    df = dd.read_csv(
-                        file_path,
-                        encoding="latin1",
-                        dtype={'CustomerID': 'float64', 'InvoiceNo': 'object'}
-                    )
-            st.success("Données chargées avec Dask (traitement distribué)")
+                st.success("Données chargées avec Dask (traitement distribué)")
+            except UnicodeDecodeError:
+                # Essayer d'autres encodages courants
+                encodings_to_try = ['latin1', 'ISO-8859-1', 'cp1252', 'utf-16']
+                for enc in encodings_to_try:
+                    try:
+                        st.info(f"Essai avec l'encodage: {enc}")
+                        df = dd.read_csv(
+                            file_path,
+                            encoding=enc,
+                            dtype={'CustomerID': 'float64', 'InvoiceNo': 'object'},
+                            assume_missing=True,
+                            on_bad_lines='warn'
+                        )
+                        st.success(f"Succès avec l'encodage: {enc}")
+                        break
+                    except:
+                        continue
+                else:
+                    st.error("Échec du chargement avec tous les encodages testés")
+                    return None
         elif uploaded_file.name.endswith(('.xls', '.xlsx')):
             # Pour Excel, utiliser pandas puis convertir en Dask
             df = pd.read_excel(file_path)
@@ -146,7 +167,11 @@ def clean_data(df):
         with ProgressBar():
             st.info("Calcul des données nettoyées...")
             # Estimer la taille
-            n_rows = df.shape[0].compute()
+            try:
+                n_rows = df.shape[0].compute()
+            except:
+                n_rows = 1000000  # Valeur par défaut si le calcul échoue
+            
             if n_rows > 500_000:
                 st.warning(f"Grand dataset détecté ({n_rows} lignes). Utilisation d'un échantillon pour certaines analyses.")
                 df_clean = df.sample(frac=0.1).compute()
@@ -156,7 +181,7 @@ def clean_data(df):
         df_clean = df
     
     # Suppression finale des valeurs manquantes pour pandas
-    if not is_dask:
+    if not isinstance(df_clean, dd.DataFrame):
         df_clean = df_clean.replace([np.inf, -np.inf], np.nan).dropna()
     
     # Réinitialiser les index
@@ -168,23 +193,30 @@ def global_stats(df):
     """Calcule les statistiques globales du DataFrame"""
     is_dask = isinstance(df, dd.DataFrame)
     
-    if is_dask:
-        # Calculs optimisés pour Dask
-        n_rows = df.shape[0].compute()
-        n_cols = len(df.columns)
-        missing_total = df.isna().sum().sum().compute()
-        duplicated = df.duplicated().sum().compute()
-        full_missing_rows = df.isna().all(axis=1).sum().compute()
-        full_missing_cols = df.isnull().all().sum().compute()
-    else:
-        n_rows = df.shape[0]
-        n_cols = df.shape[1]
-        missing_total = df.isna().sum().sum()
-        duplicated = df.duplicated().sum()
-        full_missing_rows = df.isna().all(axis=1).sum()
-        full_missing_cols = df.isnull().all().sum()
+    try:
+        if is_dask:
+            # Calculs optimisés pour Dask
+            n_rows = df.shape[0].compute()
+            n_cols = len(df.columns)
+            missing_total = df.isna().sum().sum().compute()
+            duplicated = df.duplicated().sum().compute()
+            full_missing_rows = df.isna().all(axis=1).sum().compute()
+            full_missing_cols = df.isnull().all().sum().compute()
+        else:
+            n_rows = df.shape[0]
+            n_cols = df.shape[1]
+            missing_total = df.isna().sum().sum()
+            duplicated = df.duplicated().sum()
+            full_missing_rows = df.isna().all(axis=1).sum()
+            full_missing_cols = df.isnull().all().sum()
+    except Exception as e:
+        st.error(f"Erreur lors du calcul des statistiques: {e}")
+        return pd.DataFrame({
+            "Indicateur": ["Erreur"],
+            "Valeur": [str(e)]
+        })
     
-    total_cells = n_rows * n_cols
+    total_cells = n_rows * n_cols if n_rows and n_cols else 0
     
     stats = {
         "Indicateur": [
