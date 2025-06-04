@@ -11,3 +11,4 @@ datetime
 openpyxl
 squarify
 chardet
+dask
