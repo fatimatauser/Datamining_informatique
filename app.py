@@ -1,32 +1,7 @@
-
 import streamlit as st
 from PIL import Image
 import requests
 from io import BytesIO
-
-# Configuration de la page
-st.set_page_config(
-    page_title="Analyse e-commerce",
-    layout="wide",
-    initial_sidebar_state="expanded"
-)
-
-# Injection du script de gestion d'erreurs
-st.components.v1.html("""
-<script>
-window.onerror = function(message, source, lineno, colno, error) {
-  if (message.includes('removeChild') ||
-      message.includes('NotFoundError') ||
-      message.includes('nœud à supprimer')) {
-    console.warn("[Streamlit] Erreur DOM ignorée:", message);
-    return true;
-  }
-  return false;
-};
-</script>
-""", height=0)
-
-# Import des bibliothèques
 import pandas as pd
 import numpy as np
 import matplotlib.pyplot as plt
@@ -47,7 +22,29 @@ import warnings
 # Ignorer les warnings
 warnings.filterwarnings("ignore")
 
-# Fonctions utilitaires
+# Configuration de la page 
+st.set_page_config(
+    page_title="Analyse e-commerce",
+    layout="wide",
+    initial_sidebar_state="expanded"
+)
+
+# Injection du script de gestion d'erreurs
+st.components.v1.html("""
+<script>
+window.onerror = function(message, source, lineno, colno, error) {
+  if (message.includes('removeChild') || 
+      message.includes('NotFoundError') ||
+      message.includes('nœud à supprimer')) {
+    console.warn("[Streamlit] Erreur DOM ignorée:", message);
+    return true;
+  }
+  return false;
+};
+</script>
+""", height=0)
+
+
 def load_data(uploaded_file):
     """Charge les données depuis un fichier uploadé"""
     try:
@@ -62,7 +59,7 @@ def load_data(uploaded_file):
         else:
             st.error("Format de fichier non supporté. Veuillez uploader un fichier CSV ou Excel.")
             return None
-       
+        
         st.success("Données chargées avec succès!")
         return df
     except Exception as e:
@@ -73,26 +70,25 @@ def clean_data(df):
     """Nettoie les données"""
     # Suppression des lignes entièrement vides
     df = df.dropna(how='all')
-   
+    
     # Suppression des doublons
     df = df.drop_duplicates()
-   
+    
     # Suppression des transactions sans CustomerID
     if 'CustomerID' in df.columns:
         df = df[~df['CustomerID'].isna()]
-   
+    
     # Suppression des valeurs manquantes restantes
     df = df.dropna()
-   
+    
     # SOLUTION DEFINITIVE POUR LES DATES
     if 'InvoiceDate' in df.columns:
         # Convertir en string puis en datetime
         df['InvoiceDate'] = df['InvoiceDate'].astype(str)
-       
-        # Correction 1: Essayer plusieurs formats de date
+        
         try:
             df['InvoiceDate'] = pd.to_datetime(
-                df['InvoiceDate'],
+                df['InvoiceDate'], 
                 errors='coerce',
                 infer_datetime_format=True
             )
@@ -104,26 +100,26 @@ def clean_data(df):
                     break
                 except:
                     continue
-       
+        
         # Supprimer les dates invalides
         df = df.dropna(subset=['InvoiceDate'])
-   
-    # Correction 2: Convertir les colonnes numériques problématiques
+    
+    #  Convertir les colonnes numériques 
     numeric_cols = df.select_dtypes(include=[np.number]).columns
     for col in numeric_cols:
         # Convertir en float pour éviter les problèmes de type
         df[col] = pd.to_numeric(df[col], errors='coerce')
-   
-    # Ajout du montant total si possible
+    
+    # Ajout du montant total 
     if 'Quantity' in df.columns and 'UnitPrice' in df.columns:
         df['Montant'] = df['Quantity'] * df['UnitPrice']
-   
-    # Correction 3: Supprimer les valeurs infinies
+    
+    #  Supprimer les valeurs infinies
     df = df.replace([np.inf, -np.inf], np.nan).dropna()
-   
+    
     # Réinitialiser les index
     df.reset_index(drop=True, inplace=True)
-   
+    
     return df
 
 def global_stats(df):
@@ -158,11 +154,11 @@ def global_stats(df):
     return pd.DataFrame(stats)
 
 def safe_display_dataframe(df, max_rows=10000):
-    """Affiche un DataFrame de manière sécurisée"""
+    """Affiche un DataFrame """
     if len(df) > max_rows:
         st.warning(f"Le DataFrame contient trop de lignes ({len(df)}). Affichage limité à {max_rows} lignes.")
         df = df.head(max_rows)
-   
+    
     # Conversion des types complexes en string
     for col in df.columns:
         if df[col].dtype == object:
@@ -173,73 +169,73 @@ def safe_display_dataframe(df, max_rows=10000):
                 # Si échec, supprimer la colonne
                 st.warning(f"Colonne '{col}' supprimée car type non supporté: {df[col].dtype}")
                 df = df.drop(col, axis=1)
-   
+    
     st.dataframe(df)
 
 def show_descriptive_stats(df):
     """Affiche des statistiques descriptives complètes avec visualisations"""
     st.header("📊 Analyse Descriptive Complète")
-   
+    
     tab_stats, tab_dist, tab_box, tab_bivar = st.tabs([
-        "Statistiques de Base",
-        "Distributions",
-        "Boîtes à Moustaches",
+        "Statistiques de Base", 
+        "Distributions", 
+        "Boîtes à Moustaches", 
         "Analyse Bivariée"
     ])
-   
+    
     with tab_stats:
         st.subheader("Statistiques Summaries")
-       
+        
         col1, col2 = st.columns(2)
-       
+        
         with col1:
             st.write("**Aperçu des Données**")
             safe_display_dataframe(df.head())
-           
+            
             st.write("**Types des Variables**")
             types_df = pd.DataFrame(df.dtypes, columns=['Type']).reset_index()
             types_df.columns = ['Variable', 'Type']
             safe_display_dataframe(types_df)
-           
+            
         with col2:
             st.write("**Statistiques Numériques**")
             # Filtrer uniquement les colonnes numériques et exclure CustomerID
             num_cols = df.select_dtypes(include=np.number).columns
-           
-            # CORRECTION: Exclure CustomerID des statistiques numériques
+            
+            #  Exclure CustomerID des statistiques numériques
             if 'CustomerID' in num_cols:
                 num_cols = num_cols.drop('CustomerID')
-           
+            
             if not num_cols.empty:
                 safe_display_dataframe(df[num_cols].describe())
             else:
                 st.warning("Aucune colonne numérique trouvée")
-           
+            
             st.write("**Valeurs Manquantes**")
             missing = df.isnull().sum().reset_index()
             missing.columns = ['Variable', 'Nombre']
             missing['Pourcentage'] = (missing['Nombre'] / len(df)) * 100
             safe_display_dataframe(missing)
-   
+    
     with tab_dist:
         st.subheader("Distributions des Variables")
-       
+        
         num_cols = df.select_dtypes(include=np.number).columns.tolist()
         cat_cols = df.select_dtypes(include=['object', 'category']).columns.tolist()
-       
+        
         col1, col2 = st.columns(2)
-       
+        
         with col1:
             if num_cols:
                 selected_num = st.selectbox("Variable numérique", num_cols, key="num_var")
-               
+                
                 if selected_num:
                     # Vérifier qu'il y a des valeurs à afficher
                     if df[selected_num].notna().sum() > 0:
                         fig = px.histogram(
-                            df,
-                            x=selected_num,
-                            nbins=50,
+                            df, 
+                            x=selected_num, 
+                            nbins=50, 
                             title=f"Distribution de {selected_num}"
                         )
                         st.plotly_chart(fig, use_container_width=True)
@@ -247,11 +243,11 @@ def show_descriptive_stats(df):
                         st.warning(f"Aucune donnée valide pour la colonne {selected_num}")
             else:
                 st.warning("Aucune variable numérique trouvée")
-       
+        
         with col2:
             if cat_cols:
                 selected_cat = st.selectbox("Variable catégorielle", cat_cols, key="cat_var")
-               
+                
                 if selected_cat:
                     # Limiter à un nombre raisonnable de catégories
                     unique_count = df[selected_cat].nunique()
@@ -261,13 +257,13 @@ def show_descriptive_stats(df):
                         count_data = df[df[selected_cat].isin(top_cats)][selected_cat].value_counts().reset_index()
                     else:
                         count_data = df[selected_cat].value_counts().reset_index()
-                   
+                    
                     count_data.columns = ['Catégorie', 'Count']
-                   
+                    
                     if not count_data.empty:
                         fig = px.bar(
-                            count_data,
-                            x='Catégorie',
+                            count_data, 
+                            x='Catégorie', 
                             y='Count',
                             title=f"Distribution de {selected_cat}"
                         )
@@ -276,27 +272,27 @@ def show_descriptive_stats(df):
                         st.warning("Aucune donnée à afficher")
             else:
                 st.warning("Aucune variable catégorielle trouvée")
-   
+    
     with tab_box:
         st.subheader("Boîtes à Moustaches et Variance")
-       
+        
         num_cols = df.select_dtypes(include=np.number).columns.tolist()
         if num_cols:
             selected_box = st.multiselect(
-                "Variables numériques à comparer",
-                num_cols,
+                "Variables numériques à comparer", 
+                num_cols, 
                 default=num_cols[:min(3, len(num_cols))],
                 key="box_vars"
             )
-           
+            
             if selected_box:
                 # Filtrer les colonnes avec des données valides
                 valid_cols = [col for col in selected_box if df[col].notna().sum() > 0]
-               
+                
                 if valid_cols:
                     # Créer un DataFrame avec uniquement les colonnes valides
                     plot_df = df[valid_cols].melt(value_vars=valid_cols).dropna()
-                   
+                    
                     if not plot_df.empty:
                         fig = px.box(
                             plot_df,
@@ -305,10 +301,10 @@ def show_descriptive_stats(df):
                             title="Comparaison des Distributions"
                         )
                         st.plotly_chart(fig, use_container_width=True)
-                       
+                        
                         st.subheader("Matrice de Corrélation")
                         corr_matrix = df[valid_cols].corr().round(2)
-                       
+                        
                         fig = px.imshow(
                             corr_matrix,
                             text_auto=True,
@@ -322,19 +318,19 @@ def show_descriptive_stats(df):
                     st.warning("Aucune colonne valide sélectionnée")
         else:
             st.warning("Aucune variable numérique trouvée pour les boîtes à moustaches")
-   
+    
     with tab_bivar:
         st.subheader("Analyse Bivariée")
-       
+        
         num_cols = df.select_dtypes(include=np.number).columns.tolist()
         if len(num_cols) >= 2:
             col1, col2 = st.columns(2)
-           
+            
             with col1:
                 x_var = st.selectbox("Variable X", num_cols, key="x_var")
             with col2:
                 y_var = st.selectbox("Variable Y", num_cols, index=1, key="y_var")
-           
+            
             # Vérifier que les colonnes ont des données
             if df[[x_var, y_var]].notna().any().all():
                 fig = px.scatter(
@@ -344,7 +340,7 @@ def show_descriptive_stats(df):
                     title=f"Relation entre {x_var} et {y_var}"
                 )
                 st.plotly_chart(fig, use_container_width=True)
-               
+                
                 if num_cols:
                     corr = df[[x_var, y_var]].corr().iloc[0,1]
                     st.metric("Coefficient de Corrélation", f"{corr:.2f}")
@@ -358,79 +354,80 @@ def perform_fpgrowth_analysis(df):
     # Vérification des colonnes nécessaires
     required_cols = ['InvoiceNo', 'Description', 'Quantity']
     missing_cols = [col for col in required_cols if col not in df.columns]
-   
+    
     if missing_cols:
         st.error(f"Colonnes manquantes pour FP-Growth: {', '.join(missing_cols)}")
         return
-   
+    
     with st.spinner("Préparation des données pour FP-Growth..."):
         try:
             # Création du panier
             basket = df.groupby(['InvoiceNo', 'Description'])['Quantity'].count().unstack().fillna(0)
             basket = basket.applymap(lambda x: 1 if x > 0 else 0)
-           
+            
             # Supprimer les colonnes avec des noms manquants
             basket = basket.loc[:, ~basket.columns.isin([np.nan, None, ''])]
-           
+            
             # Limiter aux colonnes les plus fréquentes si trop nombreuses
             if len(basket.columns) > 10:
                 st.warning("Trop de produits ({}). Utilisation des 10 plus fréquents.".format(len(basket.columns)))
-                top_products = basket.sum().sort_values(ascending=False).head(100).index
+                top_products = basket.sum().sort_values(ascending=False).head(10).index
                 basket = basket[top_products]
         except Exception as e:
             st.error(f"Erreur lors de la préparation des données: {e}")
             return
-   
+    
     col1, col2 = st.columns(2)
     with col1:
-        min_support = st.slider("Support minimum", 0.01, 0.5, 0.01, 0.01, key="min_support")
+        # Correction du type pour le slider
+        min_support = st.slider("Support minimum", 0.0001, 1.0, 0.01, 0.01, key="min_support")
     with col2:
-        min_lift = st.slider("Lift minimum", 1.0, 10.0, 1.0, 0.1, key="min_lift")
-   
+        min_lift = st.slider("Lift minimum", 0.001, 10.0, 1.0, 0.1, key="min_lift")
+    
     if st.button("Exécuter FP-Growth"):
         with st.spinner("Calcul des règles d'association..."):
             try:
                 frequent_itemsets = fpgrowth(basket, min_support=min_support, use_colnames=True)
-               
+                
                 if frequent_itemsets.empty:
                     st.warning("Aucun itemset fréquent trouvé avec ce support minimum")
                     return
-               
+                
                 rules = association_rules(frequent_itemsets, metric='lift', min_threshold=min_lift)
-               
+                
                 if rules.empty:
                     st.warning("Aucune règle d'association trouvée avec ces paramètres")
                     return
-               
+                
                 # Nettoyage des règles
                 rules['pair_key'] = rules.apply(lambda row: tuple(sorted([row['antecedents'], row['consequents']])), axis=1)
                 rules = rules.drop_duplicates(subset='pair_key')
                 rules.drop(columns='pair_key', inplace=True)
-               
+                
                 # Conversion en liste
                 rules['antecedents'] = rules['antecedents'].apply(lambda x: list(x))
                 rules['consequents'] = rules['consequents'].apply(lambda x: list(x))
-               
+                
                 # Formatage pour l'affichage
                 rules['antecedents_str'] = rules['antecedents'].apply(lambda x: ", ".join(x))
                 rules['consequents_str'] = rules['consequents'].apply(lambda x: ", ".join(x))
             except Exception as e:
                 st.error(f"Erreur lors du calcul des règles: {e}")
                 return
-       
+        
         st.success(f"FP-Growth terminé! {len(rules)} règles générées")
-       
+        
         # Affichage des résultats
         st.subheader("Top 20 des Règles d'Association")
         safe_display_dataframe(rules.sort_values(by='lift', ascending=False).head(20))
-       
+        
         # Visualisation
         st.subheader("Visualisation des Règles")
-       
+        
         col1, col2 = st.columns(2)
         with col1:
             top_n = st.slider("Nombre de règles à visualiser", 5, 50, 10, key="top_n_fp")
-           
+            
             fig1 = px.scatter(
                 rules.head(top_n),
                 x='support',
@@ -441,7 +438,7 @@ def perform_fpgrowth_analysis(df):
                 title="Support vs Confiance"
             )
             st.plotly_chart(fig1, use_container_width=True)
-       
+        
         with col2:
             fig2 = px.bar(
                 rules.sort_values(by='lift', ascending=False).head(top_n),
@@ -452,7 +449,7 @@ def perform_fpgrowth_analysis(df):
                 title="Top Règles par Lift"
             )
             st.plotly_chart(fig2, use_container_width=True)
-       
+        
         # Téléchargement des résultats
         st.subheader("Télécharger les résultats")
         csv = rules.to_csv(index=False).encode('utf-8')
@@ -466,17 +463,17 @@ def perform_fpgrowth_analysis(df):
 def perform_kmeans_analysis(df):
     """Effectue l'analyse K-means avec contrat de maintenance"""
     st.subheader("Sélection des Variables pour le Clustering")
-   
+    
     # Préparation des données RFM
     if 'InvoiceDate' in df.columns and 'InvoiceNo' in df.columns and 'Montant' in df.columns:
-        # Convertir InvoiceDate en datetime si nécessaire
+        # Convertir InvoiceDate en datetime 
         if not pd.api.types.is_datetime64_any_dtype(df['InvoiceDate']):
             try:
                 df['InvoiceDate'] = pd.to_datetime(df['InvoiceDate'])
             except:
                 st.error("Impossible de convertir les dates")
                 return
-           
+            
         date_ref = df['InvoiceDate'].max() + timedelta(days=1)
         rfm = df.groupby('CustomerID').agg({
             'InvoiceDate': lambda x: (date_ref - x.max()).days,
@@ -488,60 +485,60 @@ def perform_kmeans_analysis(df):
     else:
         st.warning("Colonnes manquantes pour le calcul RFM. Utilisation de toutes les colonnes numériques.")
         df_rfm = df.select_dtypes(include=np.number)
-   
+    
     # Sélection des variables
     num_cols = df_rfm.select_dtypes(include=np.number).columns.tolist()
     selected_cols = st.multiselect(
-        "Sélectionnez les variables pour le clustering",
-        num_cols,
+        "Sélectionnez les variables pour le clustering", 
+        num_cols, 
         default=num_cols[:min(3, len(num_cols))],
         key="kmeans_vars"
     )
-   
+    
     if not selected_cols:
         st.warning("Veuillez sélectionner au moins une variable numérique.")
         return
-   
+    
     # Standardisation des données
     scaler = StandardScaler()
-   
+    
     # Supprimer les valeurs manquantes et infinies
     df_rfm_clean = df_rfm[selected_cols].replace([np.inf, -np.inf], np.nan).dropna()
-   
+    
     if len(df_rfm_clean) == 0:
         st.error("Aucune donnée valide après nettoyage")
         return
-       
+        
     scaled_data = scaler.fit_transform(df_rfm_clean)
-   
+    
     # Détermination du nombre de clusters
     st.subheader("Détermination du Nombre Optimal de Clusters")
     max_clusters = st.slider("Nombre maximum de clusters à tester", 3, 15, 10, key="max_clusters")
-   
+    
     if st.button("Trouver le nombre optimal de clusters"):
         with st.spinner("Calcul en cours..."):
-            wcss = []  # Within-Cluster Sum of Square
+            wcss = []  
             silhouette_scores = []
-           
+            
             for i in range(2, max_clusters + 1):
                 try:
                     kmeans = KMeans(n_clusters=i, init='k-means++', random_state=42, n_init=10)
                     kmeans.fit(scaled_data)
                     wcss.append(kmeans.inertia_)
-                   
-                    if i > 1:  # Silhouette nécessite au moins 2 clusters
+                    
+                    if i > 1:  
                         silhouette_scores.append(silhouette_score(scaled_data, kmeans.labels_))
                 except Exception as e:
                     st.error(f"Erreur avec {i} clusters: {e}")
                     break
-           
+            
             # Trouver le meilleur nombre de clusters basé sur le score de silhouette
             if silhouette_scores:
                 best_n = np.argmax(silhouette_scores) + 2
             else:
                 best_n = 3
                 st.warning("Impossible de calculer le score de silhouette, utilisation par défaut de 3 clusters")
-       
+        
         # Affichage des résultats
         col1, col2 = st.columns(2)
         with col1:
@@ -552,7 +549,7 @@ def perform_kmeans_analysis(df):
             ax1.set_xlabel('Nombre de clusters')
             ax1.set_ylabel('WCSS')
             st.pyplot(fig1)
-       
+        
         with col2:
             st.subheader("Score de Silhouette")
             fig2, ax2 = plt.subplots()
@@ -561,7 +558,7 @@ def perform_kmeans_analysis(df):
             ax2.set_xlabel('Nombre de clusters')
             ax2.set_ylabel('Score de Silhouette')
             st.pyplot(fig2)
-       
+        
         st.success(f"Le nombre optimal de clusters est : {best_n} (score de silhouette: {silhouette_scores[best_n-2]:.3f})")
         st.session_state.best_n = best_n
         st.session_state.scaled_data = scaled_data
@@ -569,42 +566,42 @@ def perform_kmeans_analysis(df):
         st.session_state.selected_cols = selected_cols
         st.session_state.scaler = scaler
         st.session_state.df_rfm_clean = df_rfm_clean
-   
+    
     # Application de K-means
     if 'best_n' in st.session_state:
         st.subheader("Application de K-means")
         n_clusters = st.slider(
-            "Nombre de clusters",
+            "Nombre de clusters", 
             2, max_clusters, st.session_state.best_n,
             key="n_clusters"
         )
-       
+        
         if st.button("Exécuter K-means"):
             with st.spinner("Clustering en cours..."):
                 kmeans = KMeans(n_clusters=n_clusters, init='k-means++', random_state=42, n_init=10)
                 clusters = kmeans.fit_predict(st.session_state.scaled_data)
                 silhouette_avg = silhouette_score(st.session_state.scaled_data, clusters)
-               
+                
                 # Ajout des clusters aux données
                 df_clustered = st.session_state.df_rfm_clean.copy()
                 df_clustered['Cluster'] = clusters
-           
+            
             st.success(f"Clustering terminé! Score de silhouette: {silhouette_avg:.3f}")
-           
+            
             # Visualisation des clusters
             st.subheader("Visualisation des Clusters")
-           
+            
             if len(st.session_state.selected_cols) >= 2:
                 fig = px.scatter(
-                    df_clustered,
-                    x=st.session_state.selected_cols[0],
-                    y=st.session_state.selected_cols[1],
+                    df_clustered, 
+                    x=st.session_state.selected_cols[0], 
+                    y=st.session_state.selected_cols[1], 
                     color='Cluster',
                     title="Visualisation des Clusters",
                     hover_data=df_clustered.columns
                 )
                 st.plotly_chart(fig, use_container_width=True)
-           
+            
             # Profil des clusters
             st.subheader("Profil des Clusters")
             cluster_profile = df_clustered.groupby('Cluster').agg({
@@ -613,9 +610,9 @@ def perform_kmeans_analysis(df):
                 'Montant': ['mean', 'min', 'max'],
                 'CustomerID': 'count'
             }).reset_index()
-           
+            
             safe_display_dataframe(cluster_profile)
-           
+            
             # Interprétation
             st.subheader("Interprétation des Clusters")
             for cluster in sorted(df_clustered['Cluster'].unique()):
@@ -623,174 +620,195 @@ def perform_kmeans_analysis(df):
                 recence_moy = cluster_data['Recence'].mean()
                 frequence_moy = cluster_data['Frequence'].mean()
                 montant_moy = cluster_data['Montant'].mean()
-               
+                
                 st.markdown(f"**Cluster {cluster}** (Nombre: {len(cluster_data)})")
                 st.markdown(f"- Récence moyenne: {recence_moy:.1f} jours")
                 st.markdown(f"- Fréquence moyenne: {frequence_moy:.1f} commandes")
                 st.markdown(f"- Montant moyen: {montant_moy:.1f} €")
                 st.markdown("---")
-           
-            # ===========================================
-            # PARTIE CONTRAT DE MAINTENANCE (STABILITÉ TEMPORELLE)
-            # ===========================================
-            st.subheader("Contrat de Maintenance: Étude de Stabilité Temporelle")
-           
-            # Vérification des données temporelles
-            if 'InvoiceDate' not in df.columns:
-                st.warning("La colonne 'InvoiceDate' est nécessaire pour l'étude de stabilité temporelle.")
+    
+    # ===========================================
+    # PARTIE CONTRAT DE MAINTENANCE (STABILITÉ TEMPORELLE)
+    # ===========================================
+    st.subheader("Contrat de Maintenance: Étude de Stabilité Temporelle")
+    
+    # Vérification des données temporelles
+    if 'InvoiceDate' not in df.columns:
+        st.warning("La colonne 'InvoiceDate' est nécessaire pour l'étude de stabilité temporelle.")
+        return
+    
+    st.markdown("""
+    ### Objectif
+    Évaluer la stabilité du modèle de clustering au fil du temps en comparant les résultats 
+    sur différentes périodes temporelles à l'aide de l'Adjusted Rand Index (ARI).
+    """)
+    
+    # Fonctions pour l'étude de stabilité
+    def echantillonnage(df, n, pas=30, duree=180):
+        date_min = df['InvoiceDate'].min()
+        date_min = date_min + timedelta(days=pas * (n-1))
+        date_max = date_min + timedelta(days=duree)
+        
+        sample_df = df[(df['InvoiceDate'] >= date_min) & 
+                    (df['InvoiceDate'] < date_max)].copy()
+        
+        st.info(f"Échantillon {n}: {sample_df.shape[0]} lignes ({date_min.strftime('%Y-%m-%d')} au {date_max.strftime('%Y-%m-%d')})")
+        return sample_df
+
+    def prepare_data(df):
+        if 'Montant' not in df.columns:
+            if 'Quantity' in df.columns and 'UnitPrice' in df.columns:
+                df['Montant'] = df['Quantity'] * df['UnitPrice']
+            else:
+                st.error("Impossible de calculer le montant")
+                return None
+        
+        derniere_date = df['InvoiceDate'].max() + timedelta(days=1)
+        
+        rfm = df.groupby('CustomerID').agg({
+            'InvoiceDate': lambda x: (derniere_date - x.max()).days,
+            'InvoiceNo': 'nunique',
+            'Montant': 'sum'
+        }).rename(columns={
+            'InvoiceDate': 'Recence',
+            'InvoiceNo': 'Frequence',
+            'Montant': 'MontantTotal'
+        })
+        return rfm
+
+    if st.button("Lancer l'étude de stabilité temporelle", key="stability_study"):
+        with st.spinner("Création des échantillons temporels..."):
+            # Création des échantillons
+            samples = {}
+            for n in range(1, 10):
+                sample_df = echantillonnage(df, n)
+                sample_rfm = prepare_data(sample_df)
+                if sample_rfm is not None:
+                    samples[f"B{n-1}"] = sample_rfm
+            
+            if not samples:
+                st.error("Aucun échantillon valide créé")
                 return
-           
-            st.markdown("""
-            ### Objectif
-            Évaluer la stabilité du modèle de clustering au fil du temps en comparant les résultats
-            sur différentes périodes temporelles à l'aide de l'Adjusted Rand Index (ARI).
-            """)
-           
-            # Fonctions pour l'étude de stabilité
-            def echantillonnage(df, n, pas=30, duree=180):
-                date_min = df['InvoiceDate'].min()
-                date_min = date_min + timedelta(days=pas * (n-1))
-                date_max = date_min + timedelta(days=duree)
+            
+            st.session_state.samples = samples
+            st.success(f"{len(samples)} échantillons temporels créés avec succès!")
+        
+        # Préparation du modèle de référence
+        with st.spinner("Création du modèle de référence..."):
+            scaler_ref = StandardScaler()
+            B0_scaled = scaler_ref.fit_transform(samples["B0"])
+            model0 = KMeans(n_clusters=n_clusters, random_state=0, n_init=10)
+            model0.fit(B0_scaled)
+            st.session_state.model0 = model0
+            st.session_state.scaler_ref = scaler_ref
+        
+        # Fonction d'évaluation
+        def entrainer_modele(data, modele_reference, scaler_ref):
+            data_scaled = scaler_ref.transform(data)
+            nouveau_modele = KMeans(n_clusters=n_clusters, random_state=0, n_init=10)
+            nouveau_modele.fit(data_scaled)
+            labels_ref = modele_reference.predict(scaler_ref.transform(data))
+            labels_nouv = nouveau_modele.labels_
+            ari = adjusted_rand_score(labels_ref, labels_nouv)
+            return ari
+        
+        # Calcul des scores ARI
+        with st.spinner("Calcul des scores de stabilité..."):
+            ARI_scores = []
+            sample_names = sorted(st.session_state.samples.keys())
+            
+            for i, name in enumerate(sample_names[1:], start=1):  # Commencer à B1
+                ari = entrainer_modele(
+                    st.session_state.samples[name], 
+                    st.session_state.model0, 
+                    st.session_state.scaler_ref
+                )
+                ARI_scores.append(ari)
+                st.write(f"Échantillon B{i}: ARI = {ari:.4f}")
+        
+        st.session_state.ARI_scores = ARI_scores
+    
+    # Affichage des résultats de stabilité
+    if 'ARI_scores' in st.session_state:
+        st.subheader("Résultats de l'étude de stabilité")
+        
+        # Tableau des scores
+        results_df = pd.DataFrame({
+            'Période': [f"B{i}" for i in range(1, len(st.session_state.ARI_scores)+1)],
+            'Score ARI': st.session_state.ARI_scores
+        })
+        safe_display_dataframe(results_df)
+        
+       
+        st.subheader("Évolution du Score ARI")
+        
+        # Configuration du style
+        sns.set(style="whitegrid", rc={'figure.figsize': (10, 6)})
+        
+        # Création du graphique
+        plt.figure(figsize=(10, 6))
+        periods = list(range(2, 2*len(st.session_state.ARI_scores)+1, 2))
+        
+        # Tracé de la courbe
+        ax = sns.lineplot(
+            x=periods, 
+            y=st.session_state.ARI_scores,
+            marker='o',
+            markersize=8,
+            linewidth=2
+        )
+        
+        # Ligne verticale à 6 semaines
+        ax.axvline(6, color='red', linestyle='--', label='Seuil temporel')
+        
+        # Configuration des axes
+        plt.xticks(periods)
+        ax.set_xlabel('Semaines')
+        ax.set_ylabel('Score ARI')
+        ax.set_title('Évolution du Score ARI')
+        plt.legend()
+        
+        # Affichage dans Streamlit
+        st.pyplot(plt)
+        
+        
+        
+        # Interprétation et recommandations
+        st.subheader("Interprétation ")
+        
+        # Analyse de la stabilité
+        if st.session_state.ARI_scores:
+            min_ari = min(st.session_state.ARI_scores)
+            if min_ari > 0.7:
+                stability = "excellente"
+                recommendation = "Surveillance trimestrielle suffisante"
+                color = "green"
+            elif min_ari > 0.5:
+                stability = "bonne"
+                recommendation = "Surveillance mensuelle recommandée"
+                color = "orange"
+            elif min_ari > 0.3:
+                stability = "modérée"
+                recommendation = "Réévaluation bimestrielle nécessaire"
+                color = "orange"
+            else:
+                stability = "faible"
+                recommendation = "Réentraînement immédiat du modèle requis"
+                color = "red"
+            
+            st.markdown(f"""
+            <div style="border-left: 4px solid {color}; padding: 0.5em 1em; background-color: #f8f9fa;">
+                <h4>Évaluation de la stabilité: <span style="color:{color};">{stability}</span></h4>
+                <p>Score ARI minimum: {min_ari:.4f}</p>
+                <p><strong>Recommandation:</strong> {recommendation}</p>
+            </div>
+            """, unsafe_allow_html=True)
+        else:
+            st.warning("Aucun score ARI disponible")
                
-                sample_df = df[(df['InvoiceDate'] >= date_min) &
-                            (df['InvoiceDate'] < date_max)].copy()
-               
-                st.info(f"Échantillon {n}: {sample_df.shape[0]} lignes ({date_min.strftime('%Y-%m-%d')} au {date_max.strftime('%Y-%m-%d')})")
-                return sample_df
-
-            def prepare_data(df):
-                if 'Montant' not in df.columns:
-                    if 'Quantity' in df.columns and 'UnitPrice' in df.columns:
-                        df['Montant'] = df['Quantity'] * df['UnitPrice']
-                    else:
-                        st.error("Impossible de calculer le montant")
-                        return None
-               
-                derniere_date = df['InvoiceDate'].max() + timedelta(days=1)
-               
-                rfm = df.groupby('CustomerID').agg({
-                    'InvoiceDate': lambda x: (derniere_date - x.max()).days,
-                    'InvoiceNo': 'nunique',
-                    'Montant': 'sum'
-                }).rename(columns={
-                    'InvoiceDate': 'Recence',
-                    'InvoiceNo': 'Frequence',
-                    'Montant': 'MontantTotal'
-                })
-                return rfm
-
-            if st.button("Lancer l'étude de stabilité temporelle"):
-                with st.spinner("Création des échantillons temporels..."):
-                    # Création des échantillons
-                    samples = {}
-                    for n in range(1, 10):
-                        sample_df = echantillonnage(df, n)
-                        sample_rfm = prepare_data(sample_df)
-                        if sample_rfm is not None:
-                            samples[f"B{n-1}"] = sample_rfm
-                   
-                    if not samples:
-                        st.error("Aucun échantillon valide créé")
-                        return
-                   
-                    st.session_state.samples = samples
-                    st.success(f"{len(samples)} échantillons temporels créés avec succès!")
-               
-                # Préparation du modèle de référence
-                with st.spinner("Création du modèle de référence..."):
-                    scaler_ref = StandardScaler()
-                    B0_scaled = scaler_ref.fit_transform(samples["B0"])
-                    model0 = KMeans(n_clusters=n_clusters, random_state=0, n_init=10)
-                    model0.fit(B0_scaled)
-                    st.session_state.model0 = model0
-                    st.session_state.scaler_ref = scaler_ref
-               
-                # Fonction d'évaluation
-                def entrainer_modele(data, modele_reference, scaler_ref):
-                    data_scaled = scaler_ref.transform(data)
-                    nouveau_modele = KMeans(n_clusters=n_clusters, random_state=0, n_init=10)
-                    nouveau_modele.fit(data_scaled)
-                    labels_ref = modele_reference.predict(scaler_ref.transform(data))
-                    labels_nouv = nouveau_modele.labels_
-                    ari = adjusted_rand_score(labels_ref, labels_nouv)
-                    return ari
-               
-                # Calcul des scores ARI
-                with st.spinner("Calcul des scores de stabilité..."):
-                    ARI_scores = []
-                    sample_names = sorted(st.session_state.samples.keys())
-                   
-                    for i, name in enumerate(sample_names[1:], start=1):  # Commencer à B1
-                        ari = entrainer_modele(
-                            st.session_state.samples[name],
-                            st.session_state.model0,
-                            st.session_state.scaler_ref
-                        )
-                        ARI_scores.append(ari)
-                        st.write(f"Échantillon B{i}: ARI = {ari:.4f}")
-               
-                st.session_state.ARI_scores = ARI_scores
-           
-            # Affichage des résultats de stabilité
-            if 'ARI_scores' in st.session_state:
-                st.subheader("Résultats de l'étude de stabilité")
-               
-                # Tableau des scores
-                results_df = pd.DataFrame({
-                    'Période': [f"B{i}" for i in range(1, len(st.session_state.ARI_scores)+1)],
-                    'Score ARI': st.session_state.ARI_scores
-                })
-                safe_display_dataframe(results_df)
-               
-                # Graphique d'évolution
-                fig, ax = plt.subplots(figsize=(10, 6))
-                ax.plot(range(1, len(st.session_state.ARI_scores)+1), st.session_state.ARI_scores, 'o-', markersize=8)
-                ax.axhline(y=0.5, color='r', linestyle='--', label='Seuil de stabilité')
-                ax.set_xlabel('Période')
-                ax.set_ylabel('Score ARI')
-                ax.set_title('Évolution de la Stabilité du Modèle')
-                ax.set_xticks(range(1, len(st.session_state.ARI_scores)+1))
-                ax.set_xticklabels([f"Période {i}" for i in range(1, len(st.session_state.ARI_scores)+1)])
-                ax.legend()
-                ax.grid(True)
-                st.pyplot(fig)
-               
-                # Interprétation et recommandations
-                st.subheader("Interprétation et Plan de Maintenance")
-               
-                # Analyse de la stabilité
-                if st.session_state.ARI_scores:
-                    min_ari = min(st.session_state.ARI_scores)
-                    if min_ari > 0.7:
-                        stability = "excellente"
-                        recommendation = "Surveillance trimestrielle suffisante"
-                        color = "green"
-                    elif min_ari > 0.5:
-                        stability = "bonne"
-                        recommendation = "Surveillance mensuelle recommandée"
-                        color = "orange"
-                    elif min_ari > 0.3:
-                        stability = "modérée"
-                        recommendation = "Réévaluation bimestrielle nécessaire"
-                        color = "orange"
-                    else:
-                        stability = "faible"
-                        recommendation = "Réentraînement immédiat du modèle requis"
-                        color = "red"
-                   
-                    st.markdown(f"""
-                    <div style="border-left: 4px solid {color}; padding: 0.5em 1em; background-color: #f8f9fa;">
-                        <h4>Évaluation de la stabilité: <span style="color:{color};">{stability}</span></h4>
-                        <p>Score ARI minimum: {min_ari:.4f}</p>
-                        <p><strong>Recommandation:</strong> {recommendation}</p>
-                    </div>
-                    """, unsafe_allow_html=True)
-                else:
-                    st.warning("Aucun score ARI disponible")
-
 def perform_rfm_analysis(df):
     """Effectue l'analyse RFM"""
-    # Vérification des colonnes nécessaires
+    # Vérification des colonnes 
     required_cols = ['CustomerID', 'InvoiceDate', 'InvoiceNo', 'Montant']
     if 'Montant' not in df.columns:
         if 'Quantity' in df.columns and 'UnitPrice' in df.columns:
@@ -798,36 +816,36 @@ def perform_rfm_analysis(df):
         else:
             st.error("Impossible de calculer le montant: colonnes manquantes")
             return
-   
+    
     missing_cols = [col for col in required_cols if col not in df.columns]
-   
+    
     if missing_cols:
         st.error(f"Colonnes manquantes pour l'analyse RFM: {', '.join(missing_cols)}")
         return
-   
-    # Convertir InvoiceDate en datetime si nécessaire
+    
+    # Convertir InvoiceDate en datetime 
     if 'InvoiceDate' in df.columns and not pd.api.types.is_datetime64_any_dtype(df['InvoiceDate']):
         try:
             df['InvoiceDate'] = pd.to_datetime(df['InvoiceDate'])
         except:
             st.error("Impossible de convertir les dates")
             return
-   
+    
     # Calcul RFM
     date_ref = df['InvoiceDate'].max() + timedelta(days=1)
-   
+    
     rfm = df.groupby('CustomerID').agg({
         'InvoiceDate': lambda x: (date_ref - x.max()).days,
         'InvoiceNo': 'nunique',
         'Montant': 'sum'
     }).reset_index()
-   
+    
     rfm.columns = ['CustomerID', 'Recence', 'Frequence', 'Montant']
-   
+    
     # Calcul des quartiles
     quantiles = rfm[['Recence', 'Frequence', 'Montant']].quantile([0.25, 0.5, 0.75])
     quantiles = quantiles.to_dict()
-   
+    
     # Fonctions de scoring
     def r_score(x):
         if x <= quantiles['Recence'][0.25]:
@@ -838,7 +856,7 @@ def perform_rfm_analysis(df):
             return 2
         else:
             return 1
-   
+    
     def fm_score(x, var):
         if x <= quantiles[var][0.25]:
             return 1
@@ -848,13 +866,13 @@ def perform_rfm_analysis(df):
             return 3
         else:
             return 4
-   
+    
     # Application des scores
     rfm['R'] = rfm['Recence'].apply(r_score)
     rfm['F'] = rfm['Frequence'].apply(lambda x: fm_score(x, 'Frequence'))
     rfm['M'] = rfm['Montant'].apply(lambda x: fm_score(x, 'Montant'))
     rfm['RFM_Score'] = rfm['R'].map(str) + rfm['F'].map(str) + rfm['M'].map(str)
-   
+    
     # Segmentation
     contrat = {
         r'[1-2][1-2]': 'en hibernation',
@@ -868,14 +886,58 @@ def perform_rfm_analysis(df):
         r'[4-5][2-3]': 'clients potentiellement fidèles',
         r'5[4-5]': 'champions'
     }
-   
+    
     rfm['Segment'] = rfm['R'].map(str) + rfm['F'].map(str)
     rfm['Segment'] = rfm['Segment'].replace(contrat, regex=True)
-   
+    
     # Affichage des résultats
     st.subheader("Résultats de l'analyse RFM")
     safe_display_dataframe(rfm.head(10))
-   
+    
+    # Visualisation
+    st.subheader("Visualisation des Segments RFM")
+    
+    # Distribution des segments
+    segment_counts = rfm['Segment'].value_counts().reset_index()
+    segment_counts.columns = ['Segment', 'Nombre de Clients']
+    
+    col1, col2 = st.columns(2)
+    with col1:
+        fig1 = px.bar(
+            segment_counts,
+            x='Segment',
+            y='Nombre de Clients',
+            title="Répartition des Segments RFM"
+        )
+        st.plotly_chart(fig1, use_container_width=True)
+    
+    with col2:
+        fig2 = px.pie(
+            segment_counts,
+            names='Segment',
+            values='Nombre de Clients',
+            title="Distribution des Segments RFM"
+        )
+        st.plotly_chart(fig2, use_container_width=True)
+    
+    # Treemap
+    st.subheader("Treemap des Segments RFM")
+    plt.figure(figsize=(12, 8))
+    colors = ['#f94144', '#f3722c', '#f9c74f', '#90be6d', '#43aa8b',
+              '#577590', '#277da1', '#4d908e', '#f9844a', '#8ac926']
+    
+    squarify.plot(
+        sizes=segment_counts['Nombre de Clients'],
+        label=segment_counts['Segment'],
+        color=colors,
+        alpha=.9,
+        text_kwargs={'fontsize': 12, 'weight': 'bold'}
+    )
+    
+    plt.title("Segmentation RFM des Clients", fontsize=16)
+    plt.axis('off')
+    st.pyplot(plt)
+    
     # Recommandations
     st.subheader("Recommandations par Segment")
     recommendations = {
@@ -890,7 +952,7 @@ def perform_rfm_analysis(df):
         'nouveaux clients': "Bienvenue, guide d'utilisation",
         'en hibernation': "Campagnes agressives de réactivation"
     }
-   
+    
     rec_df = pd.DataFrame.from_dict(recommendations, orient='index', columns=['Recommandation'])
     safe_display_dataframe(rec_df)
 
@@ -898,7 +960,7 @@ def perform_rfm_analysis(df):
 def main():
     # Chargement de l'image d'accueil
     image_url = "https://images.pexels.com/photos/669615/pexels-photo-669615.jpeg?auto=compress&cs=tinysrgb&w=1260&h=750&dpr=1"
-   
+    
     # Guide d'utilisation dans la barre latérale
     st.sidebar.header("📚 Guide d'Utilisation")
     with st.sidebar.expander("Comment utiliser cette application"):
@@ -911,7 +973,7 @@ def main():
            - **FP-Growth** : Découvrir les associations entre produits
            - **K-means** : Segmenter les clients avec analyse de stabilité
            - **RFM** : Segmenter clients par Récence, Fréquence, Montant
-       
+        
         ### Format de données recommandé :
         Les données doivent contenir au minimum ces colonnes :
         - `CustomerID` : Identifiant unique client
@@ -920,60 +982,60 @@ def main():
         - `Description` : Description du produit
         - `Quantity` : Quantité achetée
         - `UnitPrice` : Prix unitaire
-       
+        
         ### Conseils :
         - Les fichiers CSV sont préférables aux Excel
         - La taille maximale recommandée est de 200 Mo
         -
-       
+        
         ### Fonctionnalités avancées :
         - Contrat de maintenance pour le clustering K-means
         - Export des résultats au format CSV
         - Visualisations interactives avec Plotly
         """)
-   
+    
     st.title("🛒 Plateforme d'Analyse e-commerce")
-   
+    
     # Chargement des données
     st.sidebar.header("Chargement des Données")
     uploaded_file = st.sidebar.file_uploader("Uploader votre fichier de données (CSV ou Excel)", type=['csv', 'xlsx'])
-   
+    
     df = None
     df_clean = None
-   
+    
     if uploaded_file is not None:
         df = load_data(uploaded_file)
-       
+        
         if df is not None:
             # Onglets principaux
             tab_stats, tab_fp, tab_kmeans, tab_rfm = st.tabs([
-                "Statistiques",
-                "FP-Growth",
-                "K-means",
+                "Statistiques", 
+                "FP-Growth", 
+                "K-means", 
                 "RFM"
             ])
-           
+            
             with tab_stats:
                 # Statistiques globales
                 st.header("Statistiques Globales")
                 stats_df = global_stats(df)
                 safe_display_dataframe(stats_df)
-               
+                
                 # Nettoyage des données
                 if st.button("Nettoyer les données", key="clean_data_btn"):
                     with st.spinner("Nettoyage en cours..."):
                         df_clean = clean_data(df)
                     st.success("Données nettoyées avec succès!")
                     st.session_state.df_clean = df_clean
-               
-                # Afficher les stats descriptives si données nettoyées
+                
+                # Afficher les stats descriptives 
                 if 'df_clean' in st.session_state:
                     st.header("Données Après Nettoyage")
                     st.write(f"Dimensions: {st.session_state.df_clean.shape[0]} lignes, {st.session_state.df_clean.shape[1]} colonnes")
                     show_descriptive_stats(st.session_state.df_clean)
                 else:
                     st.info("Cliquez sur 'Nettoyer les données' pour commencer l'analyse")
-           
+            
             # Onglet FP-Growth
             with tab_fp:
                 st.header("Analyse par Règles d'Association (FP-Growth)")
@@ -981,7 +1043,7 @@ def main():
                     perform_fpgrowth_analysis(st.session_state.df_clean)
                 else:
                     st.info("Veuillez d'abord nettoyer les données dans l'onglet Statistiques")
-           
+            
             # Onglet K-means
             with tab_kmeans:
                 st.header("Segmentation des Clients (K-means)")
@@ -989,7 +1051,7 @@ def main():
                     perform_kmeans_analysis(st.session_state.df_clean)
                 else:
                     st.info("Veuillez d'abord nettoyer les données dans l'onglet Statistiques")
-           
+            
             # Onglet RFM
             with tab_rfm:
                 st.header("Analyse RFM (Récence, Fréquence, Montant)")
@@ -1006,7 +1068,7 @@ def main():
         }
         </style>
         """, unsafe_allow_html=True)
-       
+        
         st.markdown("""
         ## Bienvenue dans la plateforme d'analyse e-commerce !
         Cette application permet d'analyser les données clients d'un site e-commerce à l'aide de trois approches:
@@ -1014,7 +1076,7 @@ def main():
         - **Segmentation (K-means)**: Grouper les clients en clusters similaires
         - **Analyse RFM**: Segmenter les clients basé sur la Récence, Fréquence et Montant des achats
         """)
-       
+        
         # Chargement et affichage de l'image
         try:
             response = requests.get(image_url)
@@ -1022,22 +1084,17 @@ def main():
             st.image(img, caption="Plateforme d'analyse e-commerce", use_container_width=True)
         except:
             st.warning("Impossible de charger l'image d'accueil")
-       
+        
         st.markdown("""
         ### Pour commencer :
         1. Utilisez le panneau latéral gauche pour uploader vos données
         2. Consultez le guide d'utilisation pour plus d'informations
         3. Explorez les différentes analyses disponibles
-       
+        
         <div class="big-font">
-        ⬅️ <strong>Commencez par télécharger vos données dans la barre latérale !</strong>
+        ⬅️ <strong>Commencez par uploader vos données dans la barre latérale !</strong>
         </div>
         """, unsafe_allow_html=True)
 
 if __name__ == "__main__":
     main()
-
-
-
-
-
